@@ -1,6 +1,6 @@
 package llm
 
-import "gogogot/config"
+import "gogogot/infra/config"
 
 type Provider struct {
 	ID            string

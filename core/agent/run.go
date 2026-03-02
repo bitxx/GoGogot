@@ -8,14 +8,14 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"gogogot/llm/anthropic"
+	"gogogot/infra/llm/anthropic"
 	"strings"
 	"time"
 
-	"gogogot/agent/orchestration"
-	"gogogot/llm"
-	"gogogot/store"
-	"gogogot/transport"
+	"gogogot/core/agent/orchestration"
+	"gogogot/infra/llm"
+	"gogogot/core/store"
+	"gogogot/infra/transport"
 )
 
 func (a *Agent) Run(ctx context.Context, task string, attachments ...transport.Attachment) error {

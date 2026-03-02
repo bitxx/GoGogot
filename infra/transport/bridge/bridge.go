@@ -7,11 +7,11 @@ import (
 	"gogogot/tools/system"
 	"sync"
 
-	"gogogot/agent"
-	"gogogot/agent/orchestration"
-	"gogogot/llm"
-	"gogogot/store"
-	"gogogot/transport"
+	"gogogot/core/agent"
+	"gogogot/core/agent/orchestration"
+	"gogogot/infra/llm"
+	"gogogot/core/store"
+	"gogogot/infra/transport"
 )
 
 type Bridge struct {

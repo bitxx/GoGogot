@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"gogogot/llm/anthropic"
+	"gogogot/infra/llm/anthropic"
 	"gogogot/tools"
 )
 

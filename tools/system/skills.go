@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"gogogot/skills"
-	"gogogot/store"
+	"gogogot/core/skills"
+	"gogogot/core/store"
 	"gogogot/tools"
 )
 

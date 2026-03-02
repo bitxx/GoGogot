@@ -3,10 +3,10 @@ package agent
 import (
 	"context"
 	"log/slog"
-	"gogogot/llm/anthropic"
+	"gogogot/infra/llm/anthropic"
 
-	"gogogot/agent/orchestration"
-	"gogogot/llm"
+	"gogogot/core/agent/orchestration"
+	"gogogot/infra/llm"
 )
 
 func (a *Agent) maybeCompact(ctx context.Context) error {

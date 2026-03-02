@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"gogogot/tools"
 
-	"gogogot/scheduler"
+	"gogogot/core/scheduler"
 )
 
 func ScheduleTools(sched *scheduler.Scheduler) []tools.Tool {

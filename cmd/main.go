@@ -9,15 +9,15 @@ import (
 	"os/signal"
 	"syscall"
 
-	"gogogot/agent"
-	"gogogot/config"
-	"gogogot/llm"
-	"gogogot/logger"
-	"gogogot/scheduler"
-	"gogogot/store"
+	"gogogot/core/agent"
+	"gogogot/infra/config"
+	"gogogot/infra/llm"
+	"gogogot/infra/logger"
+	"gogogot/core/scheduler"
+	"gogogot/core/store"
 	"gogogot/tools/system"
-	"gogogot/transport/bridge"
-	"gogogot/transport/telegram"
+	"gogogot/infra/transport/bridge"
+	"gogogot/infra/transport/telegram"
 
 	"github.com/joho/godotenv"
 )
@@ -73,8 +73,12 @@ func main() {
 
 	client := llm.NewClient(*provider, reg.Definitions())
 	agentCfg := agent.AgentConfig{
-		SystemPrompt: agent.SystemPrompt(t.Name()),
-		MaxTokens:    4096,
+		SystemPrompt: agent.SystemPrompt(agent.PromptContext{
+			TransportName: t.Name(),
+			ModelLabel:    provider.Label,
+		}),
+		MaxTokens:  4096,
+		Compaction: agent.DefaultCompaction(),
 	}
 	b := bridge.New(t, client, agentCfg, reg)
 

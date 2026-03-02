@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"gogogot/llm/anthropic"
+	"gogogot/infra/llm/anthropic"
 	"strings"
 	"time"
 

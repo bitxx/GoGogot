@@ -1,7 +1,7 @@
 package orchestration
 
 import (
-	"gogogot/llm/anthropic"
+	"gogogot/infra/llm/anthropic"
 )
 
 const charsPerToken = 4

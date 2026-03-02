@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	anthpkg "gogogot/llm/anthropic"
-	oaipkg "gogogot/llm/openai"
+	anthpkg "gogogot/infra/llm/anthropic"
+	oaipkg "gogogot/infra/llm/openai"
 )
 
 type (

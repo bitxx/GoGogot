@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"gogogot/agent/orchestration"
-	"gogogot/llm"
-	"gogogot/store"
+	"gogogot/core/agent/orchestration"
+	"gogogot/infra/llm"
+	"gogogot/core/store"
 )
 
 type AgentConfig struct {

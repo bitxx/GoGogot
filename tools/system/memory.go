@@ -7,7 +7,7 @@ import (
 	"gogogot/tools"
 	"strings"
 
-	"gogogot/store"
+	"gogogot/core/store"
 )
 
 func MemoryTools() []tools.Tool {

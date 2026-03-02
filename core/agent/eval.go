@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"gogogot/agent/orchestration"
+	"gogogot/core/agent/orchestration"
 )
 
 func (a *Agent) RunWithEval(ctx context.Context, task string, eval orchestration.Evaluator) error {

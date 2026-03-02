@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gogogot/scheduler"
+	"gogogot/core/scheduler"
 	"gogogot/tools"
 	"gogogot/tools/system"
 	"gogogot/tools/web"
@@ -16,6 +16,7 @@ func coreTools(braveAPIKey string, sched *scheduler.Scheduler) []tools.Tool {
 	all = append(all, web.WebFetchTool())
 	all = append(all, web.WebRequestTool())
 	all = append(all, web.WebDownloadTool())
+	all = append(all, system.IdentityTools()...)
 	all = append(all, system.MemoryTools()...)
 	all = append(all, system.SkillTools()...)
 	all = append(all, system.SystemInfoTool())

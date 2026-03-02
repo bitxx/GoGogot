@@ -1,66 +1,76 @@
 ![GoGogot](https://octagon-lab.sfo3.cdn.digitaloceanspaces.com/gogogot.jpg)
 
-# GoGogot
+# GoGogot — Lightweight Self-Hosted AI Agent Written in Go
 
 [![Go Version](https://img.shields.io/badge/go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License](https://img.shields.io/github/license/aspasskiy/GoGogot)](LICENSE)
-[![Build](https://img.shields.io/github/actions/workflow/status/aspasskiy/GoGogot/build.yml?label=build)](https://github.com/aspasskiy/GoGogot/actions)
 [![Stars](https://img.shields.io/github/stars/aspasskiy/GoGogot?style=flat)](https://github.com/aspasskiy/GoGogot/stargazers)
 [![Lines of code](https://img.shields.io/badge/lines%20of%20code-~4500-blue)](#)
 [![Docker](https://img.shields.io/badge/deploy-docker%20compose-2496ED?logo=docker&logoColor=white)](#deployment)
 
-A personal AI agent that lives on your server. Talk to it on Telegram — it runs commands, edits files, browses the web, remembers things, and schedules tasks. ~4,500 lines of Go. No frameworks, no plugins, no magic.
+An open-source, self-hosted personal AI agent written in Go. Deploy on your own server as a single ~15 MB binary — it runs shell commands, edits files, browses the web, manages persistent memory, and schedules tasks. A lightweight alternative to OpenClaw (Claude Code) in ~4,500 lines of Go. No frameworks, no plugins, no magic.
 
 ```
 You (Telegram) → GoGogot → bash, files, web, memory, scheduler → You
 ```
 
-## Why GoGogot
+## What is GoGogot?
 
-|                    | GoGogot            | OpenClaw                                      |
-| ------------------ | ------------------ | --------------------------------------------- |
-| Language           | Go                 | TypeScript                                    |
-| Codebase           | ~4,500 LOC         | ~430,000 LOC                                  |
-| Dependencies       | 7                  | 800+ npm packages                             |
-| Runtime            | Single binary      | 80+ MB Node.js                                |
-| Architecture       | 1 loop + tools     | Gateway + plugins + channel router + registry |
-| Deploy             | `docker compose up` | CLI wizard + daemon + Node >= 22             |
-| Time to understand | An afternoon       | Good luck                                     |
+GoGogot is an open-source AI agent that lives on your server. It can execute shell commands, read and write files, search and browse the web, maintain persistent memory, and run scheduled tasks — all powered by Claude or MiniMax. The entire agent is a single Go binary under 15 MB that idles at ~10 MB RAM and deploys with one `docker compose up` command.
 
-Anthropic, Cursor, OpenClaw, and the OpenAI Agents SDK all converge on the same architecture: **a while loop with tools**. OpenClaw wraps it in 430K lines of TypeScript solving multi-tenant platform problems — channel routing, plugin registries, security models — that don't exist when you're the only user. GoGogot ships the loop and gets out of the way.
+## GoGogot vs OpenClaw (Claude Code) vs Nanobot
+
+
+|                    | OpenClaw                               | Nanobot                     | GoGogot                |
+| ------------------ | -------------------------------------- | --------------------------- | ---------------------- |
+| Language           | TypeScript                             | Python                      | Go                     |
+| Codebase           | ~430,000 LOC                           | ~4,000 LOC                  | ~4,500 LOC             |
+| Dependencies       | 800+ npm packages                      | 30+ pip packages            | 7                      |
+| Install size       | ~1 GB (Node.js + npm)                  | ~150 MB (Python + pip)      | ~15 MB (single binary) |
+| RAM idle / working | ~450 MB / 2–8 GB (known memory leaks)  | ~100 MB / ~300 MB           | ~10 MB / ~30 MB        |
+| Min requirements   | 2 GB RAM, 2 CPU cores                  | 512 MB RAM                  | Anything with Linux    |
+| Deploy             | CLI wizard + daemon + Node >= 22       | `pip install` + config      | `docker compose up`    |
+| Best for           | Feature completeness                   | Learning / research         | Production use         |
+
+
+The bottleneck is always the LLM API call, not the agent runtime. GoGogot compiles to a single binary, runs on a $4/month VPS, and stays out of the way between requests.
 
 ## You Are In Control
 
-Everything is configured explicitly via environment variables. No cloud accounts, no SaaS dashboards, no telemetry.
+Everything is configured explicitly via environment variables passed at deploy time. API keys never leave your server — there is no cloud account, no SaaS dashboard, no telemetry, no phoning home.
 
-| Variable | Purpose |
-| --- | --- |
-| `ANTHROPIC_API_KEY` | Claude (direct API) |
-| `OPENROUTER_API_KEY` | MiniMax and other models via OpenRouter |
-| `GOGOGOT_MODEL` | `claude` or `minimax` — you choose the model |
-| `TELEGRAM_BOT_TOKEN` | Your Telegram bot |
-| `TELEGRAM_OWNER_ID` | Only this user can talk to the bot |
-| `BRAVE_API_KEY` | Web search (optional) |
 
-Model is also selectable via CLI flag: `--model=minimax`. Your keys, your server, your data.
+| Variable             | Purpose                                      |
+| -------------------- | -------------------------------------------- |
+| `ANTHROPIC_API_KEY`  | Claude (direct API)                          |
+| `OPENROUTER_API_KEY` | MiniMax and other models via OpenRouter      |
+| `GOGOGOT_MODEL`      | `claude` or `minimax` — you choose the model |
+| `TELEGRAM_BOT_TOKEN` | Your Telegram bot                            |
+| `TELEGRAM_OWNER_ID`  | Only this user can talk to the bot           |
+| `BRAVE_API_KEY`      | Web search (optional)                        |
+
 
 ## Cost: MiniMax vs Claude
 
-You pick the price/quality tradeoff. GoGogot supports both cheap and powerful models.
+You pick the price/quality tradeoff. Both models work out of the box — switch with an env var or CLI flag: `--model=minimax`.
 
-| Model | Input (per 1M tokens) | Output (per 1M tokens) |
-| --- | --- | --- |
-| MiniMax M2.5 (via OpenRouter) | $0.30 | $1.10 |
-| Claude Opus 4.6 | $5.00 | $25.00 |
-| Claude Opus 4 | $15.00 | $75.00 |
+
+| Model                         | Input (per 1M tokens) | Output (per 1M tokens) |
+| ----------------------------- | --------------------- | ---------------------- |
+| MiniMax M2.5 (via OpenRouter) | $0.30                 | $1.10                  |
+| Claude Opus 4.6               | $5.00                 | $25.00                 |
+| Claude Opus 4                 | $15.00                | $75.00                 |
+
 
 A typical agent session (~50K input, ~10K output):
 
-| Model | Cost per session |
-| --- | --- |
-| MiniMax | ~$0.03 |
-| Claude Opus 4.6 | ~$0.50 |
-| Claude Opus 4 | ~$1.50 |
+
+| Model           | Cost per session |
+| --------------- | ---------------- |
+| MiniMax         | ~$0.03           |
+| Claude Opus 4.6 | ~$0.50           |
+| Claude Opus 4   | ~$1.50           |
+
 
 For routine tasks — daily digests, file management, web lookups — MiniMax is more than enough. Switch to Claude for complex reasoning when you need it. One env var.
 
@@ -144,31 +154,21 @@ The LLM decides everything — when to plan, when to ask the user, when to self-
 
 ## Tools
 
-| Tool | What it does |
-| --- | --- |
-| `bash` | Execute shell commands |
-| `read_file` | Read file contents |
-| `write_file` | Create or overwrite files |
-| `edit_file` | Find-and-replace edits |
-| `list_files` | List directory contents |
-| `web_search` | Search the web (Brave) |
-| `web_fetch` | Fetch and extract page content |
-| `web_request` | Arbitrary HTTP requests |
-| `web_download` | Download files by URL |
-| `memory_list` | List memory files |
-| `memory_read` | Read from memory |
-| `memory_write` | Write to memory |
-| `system_info` | OS, disk, memory info |
-| `schedule_add` | Add a cron task |
-| `schedule_list` | List scheduled tasks |
-| `schedule_remove` | Remove a scheduled task |
-| `send_file` | Send a file back to the user |
+17 built-in tools across 5 categories:
 
-## Quick Start
+- **System** — `bash`, `read_file`, `write_file`, `edit_file`, `list_files`, `system_info`
+- **Web** — `web_search` (Brave), `web_fetch`, `web_request`, `web_download`
+- **Memory** — `memory_list`, `memory_read`, `memory_write`
+- **Scheduling** — `schedule_add`, `schedule_list`, `schedule_remove`
+- **Transport** — `send_file`
+
+
+
+## Installation & Quick Start
 
 ```bash
-git clone https://github.com/yourusername/sofie.git
-cd sofie
+git clone https://github.com/aspasskiy/GoGogot.git
+cd GoGogot
 
 # Configure
 cp .env.example .env

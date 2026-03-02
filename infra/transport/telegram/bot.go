@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"gogogot/transport"
+	"gogogot/infra/transport"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )

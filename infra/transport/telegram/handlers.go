@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"gogogot/store"
-	"gogogot/transport"
+	"gogogot/core/store"
+	"gogogot/infra/transport"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -170,10 +170,19 @@ func (t *Transport) handleCommand(_ context.Context, chatID int64, channelID, te
 	cmd := parts[0]
 
 	switch cmd {
-	case "/start", "/help":
-		t.send(chatID, "🤖 *Sofie — personal AI agent*\n\n"+
-			"Just send me a message and I'll work on it\\.\n\n"+
-			"*Commands:*\n"+
+	case "/start":
+		newChat := store.NewChat()
+		if err := newChat.Save(); err != nil {
+			t.send(chatID, "Error creating new chat: "+escapeMarkdown(err.Error()))
+			return
+		}
+		if err := store.SetExternalMapping(channelID, newChat.ID); err != nil {
+			t.send(chatID, "Error: "+escapeMarkdown(err.Error()))
+			return
+		}
+
+	case "/help":
+		t.send(chatID, "*Commands:*\n"+
 			"/new — start a fresh chat\n"+
 			"/chats — list and switch chats\n"+
 			"/memory — list memory files\n"+

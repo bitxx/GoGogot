@@ -3,7 +3,7 @@ package orchestration
 import (
 	"context"
 	"fmt"
-	"gogogot/llm/anthropic"
+	"gogogot/infra/llm/anthropic"
 	"strings"
 	"time"
 )
