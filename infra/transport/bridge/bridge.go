@@ -108,13 +108,17 @@ func (b *Bridge) runAgent(ctx context.Context, channelID string, msg transport.M
 	attachments := make([]transport.Attachment, len(msg.Attachments))
 	copy(attachments, msg.Attachments)
 
+	a.Events = make(chan orchestration.Event, 64)
+	events := a.Events
+
 	go func() {
+		defer close(events)
 		if err := a.Run(agentCtx, msg.Text, attachments...); err != nil {
 			slog.Error("bridge: agent run failed", "error", err, "channel", channelID)
 		}
 	}()
 
-	b.consumeEvents(agentCtx, channelID, a, statusID)
+	b.consumeEvents(agentCtx, channelID, events, statusID)
 }
 
 func (b *Bridge) stopAgent(ctx context.Context, channelID string) {
@@ -131,11 +135,11 @@ func (b *Bridge) stopAgent(ctx context.Context, channelID string) {
 	_ = b.transport.SendText(ctx, channelID, "⏹ Stopping...")
 }
 
-func (b *Bridge) consumeEvents(ctx context.Context, channelID string, a *agent.Agent, statusID string) {
+func (b *Bridge) consumeEvents(ctx context.Context, channelID string, events <-chan orchestration.Event, statusID string) {
 	var finalText string
 	var toolsUsed []string
 
-	for ev := range a.Events {
+	for ev := range events {
 		switch ev.Kind {
 		case orchestration.EventLLMStream:
 			text, _ := ev.Data.(map[string]any)["text"].(string)
