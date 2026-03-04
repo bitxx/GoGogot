@@ -15,7 +15,7 @@ import (
 )
 
 type AgentConfig struct {
-	SystemPrompt   string
+	PromptCtx      PromptContext
 	Model          string
 	MaxTokens      int
 	Tools          []string

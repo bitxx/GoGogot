@@ -59,7 +59,8 @@ func main() {
 
 	ownerChannelID := fmt.Sprintf("tg_%d", t.OwnerID())
 
-	sched := scheduler.New(cfg.DataDir, nil)
+	sched := scheduler.New(cfg.DataDir, nil, store.LoadTimezone())
+	system.OnTimezoneChange = sched.SetLocation
 
 	allTools := coreTools(cfg.BraveAPIKey, sched)
 	allTools = append(allTools, bridge.TransportTools()...)
@@ -67,10 +68,10 @@ func main() {
 
 	client := llm.NewClient(*provider, reg.Definitions())
 	agentCfg := agent.AgentConfig{
-		SystemPrompt: agent.SystemPrompt(agent.PromptContext{
+		PromptCtx: agent.PromptContext{
 			TransportName: t.Name(),
 			ModelLabel:    provider.Label,
-		}),
+		},
 		MaxTokens:  4096,
 		Compaction: agent.DefaultCompaction(),
 	}

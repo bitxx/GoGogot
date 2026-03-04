@@ -3,12 +3,17 @@ package system
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"gogogot/core/store"
 	"gogogot/tools"
 
 	"github.com/rs/zerolog/log"
 )
+
+// OnTimezoneChange is called after user_write when the timezone in user.md changes.
+// Set by the application to reload the scheduler, etc.
+var OnTimezoneChange func(loc *time.Location)
 
 func IdentityTools() []tools.Tool {
 	return []tools.Tool{
@@ -85,10 +90,20 @@ func userWrite(_ context.Context, input map[string]any) tools.Result {
 	if content == "" {
 		return tools.Result{Output: "content parameter is required", IsErr: true}
 	}
+
+	oldTZ := store.LoadTimezone()
+
 	if err := store.WriteUser(content); err != nil {
 		log.Error().Err(err).Msg("user_write failed")
 		return tools.Result{Output: "error writing user.md: " + err.Error(), IsErr: true}
 	}
+
+	newTZ := store.LoadTimezone()
+	if newTZ.String() != oldTZ.String() && OnTimezoneChange != nil {
+		OnTimezoneChange(newTZ)
+		log.Info().Str("from", oldTZ.String()).Str("to", newTZ.String()).Msg("timezone changed via user_write")
+	}
+
 	log.Info().Int("content_len", len(content)).Msg("user_write")
 	return tools.Result{Output: fmt.Sprintf("user.md updated (%d bytes)", len(content))}
 }

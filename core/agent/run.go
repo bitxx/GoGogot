@@ -121,7 +121,7 @@ func (a *Agent) Run(ctx context.Context, task string, attachments ...transport.A
 		}
 
 		resp, err := a.client.Call(ctx, msgs, llm.CallOptions{
-			System: a.config.SystemPrompt,
+			System: SystemPrompt(a.config.PromptCtx),
 		})
 		if err != nil {
 			a.emit(orchestration.EventError, map[string]any{"error": err.Error()})

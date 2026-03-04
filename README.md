@@ -27,30 +27,13 @@ The core philosophy of GoGogot is built around being **lightweight, extensible, 
 
 | Use Case | Example Prompt |
 | --- | --- |
-| **Daily Digest** | Find top 5 AI news from today, summarize each in 2 sentences, send me every morning at 9:00 |
-| **Report Generation** | Download sales data from this URL, calculate totals by region, generate a PDF report |
-| **File Processing** | Take these 12 screenshots, merge them into a single PDF, and send the file back |
-| **Market Research** | Search the web for pricing of competitors X, Y, Z and make a comparison table |
-| **Server Monitoring** | Check disk and memory usage every hour, alert me in Telegram if anything exceeds 80% |
-| **Data Extraction** | Fetch this webpage, extract all email addresses and phone numbers into a CSV |
-| **Routine Automation** | Every Friday at 18:00, pull this week's git commits and send me a changelog summary |
-
-## GoGogot vs OpenClaw (Claude Code) vs Nanobot
-
-
-|                    | OpenClaw                               | Nanobot                     | GoGogot                |
-| ------------------ | -------------------------------------- | --------------------------- | ---------------------- |
-| Language           | TypeScript                             | Python                      | Go                     |
-| Codebase           | ~430,000 LOC                           | ~4,000 LOC                  | ~4,500 LOC             |
-| Dependencies       | 800+ npm packages                      | 30+ pip packages            | 7                      |
-| Install size       | ~1 GB (Node.js + npm)                  | ~150 MB (Python + pip)      | ~15 MB (single binary) |
-| RAM idle / working | ~450 MB / 2–8 GB (known memory leaks)  | ~100 MB / ~300 MB           | ~10 MB / ~30 MB        |
-| Min requirements   | 2 GB RAM, 2 CPU cores                  | 512 MB RAM                  | Anything with Linux    |
-| Deploy             | CLI wizard + daemon + Node >= 22       | `pip install` + config      | `docker compose up`    |
-| Best for           | Feature completeness                   | Learning / research         | Production use         |
-
-
-The bottleneck is always the LLM API call, not the agent runtime. GoGogot compiles to a single binary, runs on a $4/month VPS, and stays out of the way between requests.
+| 📰 **Daily Digest** | Find top 5 AI news from today, summarize each in 2 sentences, send me every morning at 9:00 |
+| 📊 **Report Generation** | Download sales data from this URL, calculate totals by region, generate a PDF report |
+| 📁 **File Processing** | Take these 12 screenshots, merge them into a single PDF, and send the file back |
+| 🔍 **Market Research** | Search the web for pricing of competitors X, Y, Z and make a comparison table |
+| 🖥️ **Server Monitoring** | Check disk and memory usage every hour, alert me in Telegram if anything exceeds 80% |
+| 🗃️ **Data Extraction** | Fetch this webpage, extract all email addresses and phone numbers into a CSV |
+| ⚙️ **Routine Automation** | Every Friday at 18:00, pull this week's git commits and send me a changelog summary |
 
 ## You Are In Control
 

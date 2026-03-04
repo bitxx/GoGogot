@@ -82,7 +82,11 @@ func buildIdentityToolsSection() string {
 - user.md — everything you know about your owner (name, preferences, timezone, context).
 Both are loaded into your context automatically at the start of every conversation.
 Update them as you learn more using soul_write and user_write.
-Always read first with soul_read/user_read before updating to avoid losing information.`
+Always read first with soul_read/user_read before updating to avoid losing information.
+
+TIMEZONE (critical): user.md MUST contain a line "timezone: <IANA>" (e.g. "timezone: Europe/Moscow").
+The system reads this value to display correct local time and run scheduled tasks in the right timezone.
+If user.md has no timezone, ask the owner immediately and save it. Use IANA format only (e.g. Europe/Moscow, America/New_York, Asia/Tokyo).`
 }
 
 func buildMemorySection() string {
@@ -139,6 +143,7 @@ func buildSchedulingSection() string {
 Use the schedule_add, schedule_list, schedule_remove tools — NOT crontab.
 System cron will not survive container restarts — the built-in scheduler
 is persisted to /data and restores automatically.
+Cron schedules run in the owner's local timezone (from user.md).
 Example: schedule_add(id="morning-news", schedule="0 8 * * *", command="Send a morning news digest to the owner")
 When a task fires, a fresh agent runs the command in-process and sends the
 result directly to the owner. Each task has a 5-minute timeout.
@@ -160,7 +165,9 @@ func buildRuntimeSection(ctx PromptContext) string {
 	if ctx.ModelLabel != "" {
 		parts = append(parts, "model="+sanitizePromptValue(ctx.ModelLabel))
 	}
-	parts = append(parts, "time="+time.Now().UTC().Format("2006-01-02 15:04 UTC"))
+	loc := store.LoadTimezone()
+	now := time.Now().In(loc)
+	parts = append(parts, "time="+now.Format("2006-01-02 15:04 MST"))
 	return "RUNTIME: " + strings.Join(parts, " | ")
 }
 
@@ -206,7 +213,8 @@ how you interact with your owner, then use soul_write to define your identity
 			b.WriteString(`
 Your user.md is empty — you don't know your owner yet.
 Ask the owner about themselves naturally during conversation (name, what they do,
-preferences, timezone) and save it with user_write.`)
+preferences, timezone) and save it with user_write.
+IMPORTANT: You must ask for their timezone immediately and include a "timezone: <IANA>" line in user.md (e.g. "timezone: Europe/Moscow").`)
 		}
 	}
 

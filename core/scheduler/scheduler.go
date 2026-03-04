@@ -68,9 +68,12 @@ type Scheduler struct {
 	sem      chan struct{}
 }
 
-func New(dataDir string, executor TaskExecutor) *Scheduler {
+func New(dataDir string, executor TaskExecutor, loc *time.Location) *Scheduler {
+	if loc == nil {
+		loc = time.UTC
+	}
 	return &Scheduler{
-		cron:     cron.New(),
+		cron:     cron.New(cron.WithLocation(loc)),
 		tasks:    make(map[string]*Task),
 		path:     filepath.Join(dataDir, "schedules.json"),
 		executor: executor,
@@ -82,6 +85,27 @@ func (s *Scheduler) SetExecutor(exec TaskExecutor) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.executor = exec
+}
+
+// SetLocation stops the cron, recreates it with a new timezone, and re-adds all tasks.
+func (s *Scheduler) SetLocation(loc *time.Location) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ctx := s.cron.Stop()
+	<-ctx.Done()
+
+	s.cron = cron.New(cron.WithLocation(loc))
+	for _, t := range s.tasks {
+		entryID, err := s.cron.AddFunc(t.Schedule, s.makeRunner(t.ID, t.Command))
+		if err != nil {
+			log.Error().Err(err).Str("id", t.ID).Msg("failed to re-add task after timezone change")
+			continue
+		}
+		t.entryID = entryID
+	}
+	s.cron.Start()
+	log.Info().Str("location", loc.String()).Int("tasks", len(s.tasks)).Msg("scheduler timezone updated")
 }
 
 func (s *Scheduler) Start() error {
