@@ -140,7 +140,10 @@ Use the schedule_add, schedule_list, schedule_remove tools — NOT crontab.
 System cron will not survive container restarts — the built-in scheduler
 is persisted to /data and restores automatically.
 Example: schedule_add(id="morning-news", schedule="0 8 * * *", command="Send a morning news digest to the owner")
-When the task fires, a fresh agent runs the command and sends the result to the user.
+When a task fires, a fresh agent runs the command in-process and sends the
+result directly to the owner. Each task has a 5-minute timeout.
+If a task fails repeatedly, it backs off exponentially (30s → 1m → 5m → 15m → 1h).
+Use schedule_list to check task state (last status, errors, next run).
 Always save a note about scheduled tasks in memory (scheduled-tasks.md).`
 }
 

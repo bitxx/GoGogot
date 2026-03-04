@@ -13,7 +13,7 @@ func ScheduleTools(sched *scheduler.Scheduler) []tools.Tool {
 	return []tools.Tool{
 		{
 			Name:        "schedule_add",
-			Description: "Add or update a recurring scheduled task. The task will run on the cron schedule and execute as a one-shot agent invocation (gogogot --task). Persists across restarts. Use standard 5-field cron: min hour dom month dow.",
+			Description: "Add or update a recurring scheduled task. The task runs in-process on the cron schedule — a fresh agent executes the command and sends the result to the owner. Persists across restarts. Use standard 5-field cron: min hour dom month dow.",
 			Parameters: map[string]any{
 				"id": map[string]any{
 					"type":        "string",
@@ -52,7 +52,7 @@ func ScheduleTools(sched *scheduler.Scheduler) []tools.Tool {
 		},
 		{
 			Name:        "schedule_list",
-			Description: "List all scheduled recurring tasks with their cron expressions, commands, and next run times.",
+			Description: "List all scheduled recurring tasks with their cron expressions, commands, next run times, and execution state (last status, errors, duration).",
 			Parameters:  map[string]any{},
 		Handler: func(_ context.Context, _ map[string]any) tools.Result {
 			if sched == nil {

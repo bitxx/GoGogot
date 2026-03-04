@@ -10,14 +10,15 @@ import (
 	"syscall"
 
 	"gogogot/core/agent"
+	"gogogot/core/agent/orchestration"
+	"gogogot/core/scheduler"
+	"gogogot/core/store"
 	"gogogot/infra/config"
 	"gogogot/infra/llm"
 	"gogogot/infra/logger"
-	"gogogot/core/scheduler"
-	"gogogot/core/store"
-	"gogogot/tools/system"
 	"gogogot/infra/transport/bridge"
 	"gogogot/infra/transport/telegram"
+	"gogogot/tools/system"
 
 	"github.com/joho/godotenv"
 )
@@ -48,12 +49,6 @@ func main() {
 	defer logger.Close()
 
 	store.Init(cfg.DataDir)
-	sched := scheduler.New(cfg.DataDir)
-	if err := sched.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "error starting scheduler: %v\n", err)
-		os.Exit(1)
-	}
-	defer sched.Stop()
 
 	provider, err := selectProvider(cfg)
 	if err != nil {
@@ -66,6 +61,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+
+	ownerChannelID := fmt.Sprintf("tg_%d", t.OwnerID())
+
+	sched := scheduler.New(cfg.DataDir, nil)
 
 	allTools := coreTools(cfg.BraveAPIKey, sched)
 	allTools = append(allTools, bridge.TransportTools()...)
@@ -80,6 +79,16 @@ func main() {
 		MaxTokens:  4096,
 		Compaction: agent.DefaultCompaction(),
 	}
+
+	executor := buildTaskExecutor(t, client, agentCfg, reg, ownerChannelID)
+	sched.SetExecutor(executor)
+
+	if err := sched.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "error starting scheduler: %v\n", err)
+		os.Exit(1)
+	}
+	defer sched.Stop()
+
 	b := bridge.New(t, client, agentCfg, reg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -90,6 +99,59 @@ func main() {
 		slog.Error("bridge run error", "error", err)
 	}
 	fmt.Println("Shutting down.")
+}
+
+// buildTaskExecutor creates an in-process executor that runs a one-shot agent
+// for each scheduled task and sends the result to the owner via Telegram.
+func buildTaskExecutor(
+	t *telegram.Transport,
+	client llm.LLM,
+	agentCfg agent.AgentConfig,
+	reg *system.Registry,
+	ownerChannelID string,
+) scheduler.TaskExecutor {
+	return func(ctx context.Context, taskID, command string) (string, error) {
+		chat := store.NewChat()
+		chat.Title = fmt.Sprintf("cron:%s", taskID)
+		if err := chat.Save(); err != nil {
+			return "", fmt.Errorf("create chat: %w", err)
+		}
+
+		a := agent.New(client, chat, agentCfg, reg)
+		a.Events = make(chan orchestration.Event, 64)
+		events := a.Events
+
+		var runErr error
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			defer close(events)
+			runErr = a.Run(ctx, command)
+		}()
+
+		var finalText string
+		for ev := range events {
+			if ev.Kind == orchestration.EventLLMStream {
+				if text, ok := ev.Data.(map[string]any)["text"].(string); ok {
+					finalText = text
+				}
+			}
+		}
+		<-done
+
+		if runErr != nil {
+			return "", runErr
+		}
+
+		if finalText != "" {
+			prefix := fmt.Sprintf("⏰ [cron:%s]\n\n", taskID)
+			if err := t.SendText(ctx, ownerChannelID, prefix+finalText); err != nil {
+				slog.Error("scheduler: failed to send result to owner", "task", taskID, "error", err)
+			}
+		}
+
+		return finalText, nil
+	}
 }
 
 func selectProvider(cfg *config.Config) (*llm.Provider, error) {

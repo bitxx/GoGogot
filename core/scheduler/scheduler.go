@@ -1,17 +1,44 @@
 package scheduler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/robfig/cron/v3"
 )
+
+// TaskExecutor runs a scheduled command in-process and returns the agent's
+// text output. The context carries a timeout; implementations must respect it.
+type TaskExecutor func(ctx context.Context, taskID, command string) (string, error)
+
+// backoffSchedule defines exponential delays indexed by consecutive error count.
+var backoffSchedule = []time.Duration{
+	30 * time.Second,  // 1st error
+	1 * time.Minute,   // 2nd error
+	5 * time.Minute,   // 3rd error
+	15 * time.Minute,  // 4th error
+	60 * time.Minute,  // 5th+ error
+}
+
+const (
+	defaultTaskTimeout  = 5 * time.Minute
+	maxConcurrentTasks  = 2
+)
+
+type TaskState struct {
+	LastRunAt         time.Time `json:"last_run_at,omitempty"`
+	LastStatus        string    `json:"last_status,omitempty"`
+	LastError         string    `json:"last_error,omitempty"`
+	LastDurationMs    int64     `json:"last_duration_ms,omitempty"`
+	ConsecutiveErrors int       `json:"consecutive_errors,omitempty"`
+}
 
 type Task struct {
 	ID        string    `json:"id"`
@@ -19,7 +46,10 @@ type Task struct {
 	Command   string    `json:"command"`
 	Label     string    `json:"label"`
 	CreatedAt time.Time `json:"created_at"`
-	entryID   cron.EntryID
+	State     TaskState `json:"state"`
+
+	entryID cron.EntryID
+	running atomic.Bool
 }
 
 type TaskInfo struct {
@@ -29,21 +59,32 @@ type TaskInfo struct {
 	Label     string    `json:"label"`
 	NextRun   time.Time `json:"next_run"`
 	CreatedAt time.Time `json:"created_at"`
+	State     TaskState `json:"state"`
 }
 
 type Scheduler struct {
-	mu    sync.Mutex
-	cron  *cron.Cron
-	tasks map[string]*Task
-	path  string
+	mu       sync.Mutex
+	cron     *cron.Cron
+	tasks    map[string]*Task
+	path     string
+	executor TaskExecutor
+	sem      chan struct{}
 }
 
-func New(dataDir string) *Scheduler {
+func New(dataDir string, executor TaskExecutor) *Scheduler {
 	return &Scheduler{
-		cron:  cron.New(),
-		tasks: make(map[string]*Task),
-		path:  filepath.Join(dataDir, "schedules.json"),
+		cron:     cron.New(),
+		tasks:    make(map[string]*Task),
+		path:     filepath.Join(dataDir, "schedules.json"),
+		executor: executor,
+		sem:      make(chan struct{}, maxConcurrentTasks),
 	}
+}
+
+func (s *Scheduler) SetExecutor(exec TaskExecutor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.executor = exec
 }
 
 func (s *Scheduler) Start() error {
@@ -111,6 +152,7 @@ func (s *Scheduler) List() []TaskInfo {
 			Command:   t.Command,
 			Label:     t.Label,
 			CreatedAt: t.CreatedAt,
+			State:     t.State,
 		}
 		if entry := s.cron.Entry(t.entryID); !entry.Next.IsZero() {
 			info.NextRun = entry.Next
@@ -122,22 +164,81 @@ func (s *Scheduler) List() []TaskInfo {
 
 func (s *Scheduler) makeRunner(id, command string) func() {
 	return func() {
-		slog.Info("scheduler firing task", "id", id, "command", command)
-
-		bin, err := os.Executable()
-		if err != nil {
-			bin = "gogogot"
-		}
-
-		cmd := exec.Command(bin, "--task", command)
-		cmd.Env = os.Environ()
-
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			slog.Error("scheduled task failed", "id", id, "error", err, "output", string(out))
+		s.mu.Lock()
+		task, ok := s.tasks[id]
+		s.mu.Unlock()
+		if !ok {
 			return
 		}
-		slog.Info("scheduled task completed", "id", id, "output_len", len(out))
+
+		// Singleton guard: skip if already running.
+		if !task.running.CompareAndSwap(false, true) {
+			slog.Warn("scheduler: task already running, skipping", "id", id)
+			return
+		}
+		defer task.running.Store(false)
+
+		// Exponential backoff: skip if too soon after consecutive errors.
+		if task.State.ConsecutiveErrors > 0 && !task.State.LastRunAt.IsZero() {
+			idx := task.State.ConsecutiveErrors - 1
+			if idx >= len(backoffSchedule) {
+				idx = len(backoffSchedule) - 1
+			}
+			cooldown := backoffSchedule[idx]
+			if time.Since(task.State.LastRunAt) < cooldown {
+				slog.Info("scheduler: backoff active, skipping",
+					"id", id,
+					"consecutive_errors", task.State.ConsecutiveErrors,
+					"cooldown", cooldown,
+				)
+				return
+			}
+		}
+
+		// Acquire concurrency semaphore.
+		s.sem <- struct{}{}
+		defer func() { <-s.sem }()
+
+		slog.Info("scheduler firing task", "id", id, "command", command)
+		start := time.Now()
+
+		ctx, cancel := context.WithTimeout(context.Background(), defaultTaskTimeout)
+		defer cancel()
+
+		output, err := s.executor(ctx, id, command)
+
+		elapsed := time.Since(start)
+		state := TaskState{
+			LastRunAt:      start,
+			LastDurationMs: elapsed.Milliseconds(),
+		}
+
+		if err != nil {
+			state.LastStatus = "error"
+			state.LastError = err.Error()
+			state.ConsecutiveErrors = task.State.ConsecutiveErrors + 1
+			slog.Error("scheduled task failed",
+				"id", id,
+				"error", err,
+				"consecutive_errors", state.ConsecutiveErrors,
+				"duration", elapsed,
+			)
+		} else {
+			state.LastStatus = "ok"
+			state.ConsecutiveErrors = 0
+			slog.Info("scheduled task completed",
+				"id", id,
+				"output_len", len(output),
+				"duration", elapsed,
+			)
+		}
+
+		s.mu.Lock()
+		if t, ok := s.tasks[id]; ok {
+			t.State = state
+			_ = s.save()
+		}
+		s.mu.Unlock()
 	}
 }
 
