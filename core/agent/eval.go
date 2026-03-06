@@ -3,6 +3,9 @@ package agent
 import (
 	"context"
 	"fmt"
+
+	"gogogot/core/event"
+	"gogogot/infra/llm/types"
 )
 
 type EvalResult struct {
@@ -23,7 +26,7 @@ func (a *Agent) RunWithEval(ctx context.Context, task string, eval Evaluator) er
 	}
 
 	for iter := 0; iter < maxIters; iter++ {
-		err := a.Run(ctx, task)
+		err := a.Run(ctx, []types.ContentBlock{types.TextBlock(task)})
 		if err != nil {
 			return err
 		}
@@ -32,9 +35,9 @@ func (a *Agent) RunWithEval(ctx context.Context, task string, eval Evaluator) er
 			break
 		}
 
-		a.emit(EventEvalRun, map[string]any{"iteration": iter})
+		a.emit(event.EvalRun, map[string]any{"iteration": iter})
 		result := eval.Evaluate(ctx)
-		a.emit(EventEvalResult, map[string]any{
+		a.emit(event.EvalResult, map[string]any{
 			"iteration": iter,
 			"passed":    result.Passed,
 			"feedback":  result.Feedback,

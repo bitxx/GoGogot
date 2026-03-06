@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"gogogot/core/event"
 	"gogogot/infra/llm"
 	"gogogot/infra/llm/types"
 
@@ -100,7 +101,7 @@ func (a *Agent) maybeCompact(ctx context.Context) error {
 	}
 
 	after := EstimateTokens(a.session.Messages())
-	a.emit(EventCompaction, map[string]any{
+	a.emit(event.Compaction, map[string]any{
 		"before_tokens": estimated,
 		"after_tokens":  after,
 	})

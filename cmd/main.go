@@ -9,11 +9,13 @@ import (
 	"syscall"
 
 	"gogogot/core/agent"
+	"gogogot/core/event"
 	"gogogot/core/prompt"
 	"gogogot/core/scheduler"
 	"gogogot/core/store"
 	"gogogot/infra/config"
 	"gogogot/infra/llm"
+	"gogogot/infra/llm/types"
 	"gogogot/infra/logger"
 	"gogogot/infra/transport/bridge"
 	"gogogot/infra/transport/telegram"
@@ -114,7 +116,7 @@ func buildTaskExecutor(
 		}
 
 		a := agent.New(client, chat, agentCfg, reg)
-		a.Events = make(chan agent.Event, 64)
+		a.Events = make(chan event.Event, 64)
 		events := a.Events
 
 		var runErr error
@@ -122,12 +124,12 @@ func buildTaskExecutor(
 		go func() {
 			defer close(done)
 			defer close(events)
-			runErr = a.Run(ctx, command)
+			runErr = a.Run(ctx, []types.ContentBlock{types.TextBlock(command)})
 		}()
 
 		var finalText string
 		for ev := range events {
-			if ev.Kind == agent.EventLLMStream {
+			if ev.Kind == event.LLMStream {
 				if text, ok := ev.Data.(map[string]any)["text"].(string); ok {
 					finalText = text
 				}

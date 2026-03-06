@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"gogogot/core/agent"
+	"gogogot/core/event"
 	"gogogot/core/store"
 	"gogogot/infra/llm"
 	"gogogot/infra/transport"
@@ -121,15 +122,15 @@ func (b *Bridge) runAgent(ctx context.Context, channelID string, msg transport.M
 
 	agentCtx = transport.WithTransport(agentCtx, b.transport, channelID)
 
-	attachments := make([]transport.Attachment, len(msg.Attachments))
-	copy(attachments, msg.Attachments)
+	blocks, cleanup := processAttachments(a.Chat.ID, msg.Text, msg.Attachments)
+	defer cleanup()
 
-	a.Events = make(chan agent.Event, 64)
+	a.Events = make(chan event.Event, 64)
 	events := a.Events
 
 	go func() {
 		defer close(events)
-		if err := a.Run(agentCtx, msg.Text, attachments...); err != nil {
+		if err := a.Run(agentCtx, blocks); err != nil {
 			log.Error().Err(err).Str("channel", channelID).Msg("bridge: agent run failed")
 		}
 	}()
@@ -151,17 +152,17 @@ func (b *Bridge) stopAgent(ctx context.Context, channelID string) {
 	_ = b.transport.SendText(ctx, channelID, "⏹ Stopping...")
 }
 
-func (b *Bridge) consumeEvents(ctx context.Context, channelID string, events <-chan agent.Event, statusID string) {
+func (b *Bridge) consumeEvents(ctx context.Context, channelID string, events <-chan event.Event, statusID string) {
 	var finalText string
 	var toolsUsed []string
 
 	for ev := range events {
 		switch ev.Kind {
-		case agent.EventLLMStream:
+		case event.LLMStream:
 			text, _ := ev.Data.(map[string]any)["text"].(string)
 			finalText = text
 
-		case agent.EventToolStart:
+		case event.ToolStart:
 			name, _ := ev.Data.(map[string]any)["name"].(string)
 			toolsUsed = append(toolsUsed, name)
 			log.Debug().Str("name", name).Str("channel", channelID).Msg("bridge: tool running")
@@ -173,7 +174,7 @@ func (b *Bridge) consumeEvents(ctx context.Context, channelID string, events <-c
 				_ = tn.SendTyping(ctx, channelID)
 			}
 
-		case agent.EventError:
+		case event.Error:
 			if ctx.Err() != nil {
 				return
 			}
@@ -189,7 +190,7 @@ func (b *Bridge) consumeEvents(ctx context.Context, channelID string, events <-c
 			}
 			return
 
-		case agent.EventDone:
+		case event.Done:
 			cancelled := ctx.Err() != nil
 			log.Info().
 				Str("channel", channelID).

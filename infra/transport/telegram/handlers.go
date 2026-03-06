@@ -91,7 +91,14 @@ func (t *Transport) convertAndDispatch(ctx context.Context, msgs []*tgbotapi.Mes
 			textParts = append(textParts, text)
 		}
 
-		if msg.Document != nil {
+		if msg.Animation != nil {
+			att, err := t.processAnimation(msg.Animation)
+			if err != nil {
+				log.Error().Err(err).Msg("failed to process animation")
+			} else if att != nil {
+				attachments = append(attachments, *att)
+			}
+		} else if msg.Document != nil {
 			att, err := t.processDocument(msg.Document)
 			if err != nil {
 				log.Error().Err(err).Msg("failed to process document")
@@ -107,6 +114,79 @@ func (t *Transport) convertAndDispatch(ctx context.Context, msgs []*tgbotapi.Mes
 			} else {
 				attachments = append(attachments, *att)
 			}
+		}
+
+		if msg.Audio != nil {
+			att, err := t.processAudio(msg.Audio)
+			if err != nil {
+				log.Error().Err(err).Msg("failed to process audio")
+			} else if att != nil {
+				attachments = append(attachments, *att)
+			}
+		}
+
+		if msg.Voice != nil {
+			att, err := t.processVoice(msg.Voice)
+			if err != nil {
+				log.Error().Err(err).Msg("failed to process voice")
+			} else if att != nil {
+				attachments = append(attachments, *att)
+			}
+		}
+
+		if msg.Video != nil {
+			att, err := t.processVideo(msg.Video)
+			if err != nil {
+				log.Error().Err(err).Msg("failed to process video")
+			} else if att != nil {
+				attachments = append(attachments, *att)
+			}
+		}
+
+		if msg.VideoNote != nil {
+			att, err := t.processVideoNote(msg.VideoNote)
+			if err != nil {
+				log.Error().Err(err).Msg("failed to process video note")
+			} else if att != nil {
+				attachments = append(attachments, *att)
+			}
+		}
+
+		if msg.Sticker != nil {
+			att, err := t.processSticker(msg.Sticker)
+			if err != nil {
+				log.Error().Err(err).Msg("failed to process sticker")
+			} else if att != nil {
+				attachments = append(attachments, *att)
+			}
+		}
+
+		if msg.Venue != nil {
+			textParts = append(textParts, fmt.Sprintf("[Venue: %s, %s — lat=%.6f, lon=%.6f]",
+				msg.Venue.Title, msg.Venue.Address,
+				msg.Venue.Location.Latitude, msg.Venue.Location.Longitude))
+		} else if msg.Location != nil {
+			textParts = append(textParts, fmt.Sprintf("[Location: lat=%.6f, lon=%.6f]",
+				msg.Location.Latitude, msg.Location.Longitude))
+		}
+
+		if msg.Contact != nil {
+			textParts = append(textParts, fmt.Sprintf("[Contact: %s %s, phone: %s]",
+				msg.Contact.FirstName, msg.Contact.LastName, msg.Contact.PhoneNumber))
+		}
+
+		if msg.Poll != nil {
+			opts := make([]string, len(msg.Poll.Options))
+			for i, o := range msg.Poll.Options {
+				opts[i] = o.Text
+			}
+			textParts = append(textParts, fmt.Sprintf("[Poll: %s — options: %s]",
+				msg.Poll.Question, strings.Join(opts, ", ")))
+		}
+
+		if msg.Dice != nil {
+			textParts = append(textParts, fmt.Sprintf("[Dice: %s = %d]",
+				msg.Dice.Emoji, msg.Dice.Value))
 		}
 	}
 

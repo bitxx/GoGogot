@@ -1,4 +1,4 @@
-package agent
+package guardrails
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"gogogot/core/hooks"
 )
 
 const (
@@ -36,8 +38,8 @@ func NewLoopDetector(threshold int) *LoopDetector {
 }
 
 // BeforeHook returns a hook that records the call and checks for loops.
-func (ld *LoopDetector) BeforeHook() BeforeToolCallFunc {
-	return func(_ context.Context, tc *ToolCallContext) error {
+func (ld *LoopDetector) BeforeHook() hooks.BeforeToolCallFunc {
+	return func(_ context.Context, tc *hooks.ToolCallContext) error {
 		h := hashArgs(tc.ArgsRaw)
 		ld.record(tc.ToolName, h)
 		if n := ld.consecutiveCount(); n >= ld.threshold {

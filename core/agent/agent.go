@@ -2,11 +2,11 @@ package agent
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
-	"strings"
 	"time"
 
+	"gogogot/core/event"
+	"gogogot/core/guardrails"
+	"gogogot/core/hooks"
 	"gogogot/core/prompt"
 	"gogogot/core/store"
 	"gogogot/infra/llm"
@@ -29,13 +29,13 @@ type AgentConfig struct {
 type Agent struct {
 	client      llm.LLM
 	Chat        *store.Chat
-	Events      chan Event
+	Events      chan event.Event
 	config      AgentConfig
 	session     *Session
 	registry    *system.Registry
 	localTools  map[string]tools.Tool
-	beforeHooks []BeforeToolCallFunc
-	afterHooks  []AfterToolCallFunc
+	beforeHooks []hooks.BeforeToolCallFunc
+	afterHooks  []hooks.AfterToolCallFunc
 }
 
 func New(client llm.LLM, chat *store.Chat, config AgentConfig, registry *system.Registry) *Agent {
@@ -45,7 +45,7 @@ func New(client llm.LLM, chat *store.Chat, config AgentConfig, registry *system.
 	a := &Agent{
 		client:   client,
 		Chat:     chat,
-		Events:   make(chan Event, 64),
+		Events:   make(chan event.Event, 64),
 		config:   config,
 		session:  NewSession(chat.ID, ""),
 		registry: registry,
@@ -54,8 +54,10 @@ func New(client llm.LLM, chat *store.Chat, config AgentConfig, registry *system.
 		},
 	}
 
-	ld := NewLoopDetector(0)
+	ld := guardrails.NewLoopDetector(0)
 	a.AddBeforeHook(ld.BeforeHook())
+	a.AddBeforeHook(hooks.LoggingBeforeHook())
+	a.AddAfterHook(hooks.LoggingAfterHook())
 
 	return a
 }
@@ -84,17 +86,17 @@ func (a *Agent) executeLocal(ctx context.Context, name string, input map[string]
 	return t.Handler(ctx, input), true
 }
 
-func (a *Agent) AddBeforeHook(fn BeforeToolCallFunc) {
+func (a *Agent) AddBeforeHook(fn hooks.BeforeToolCallFunc) {
 	a.beforeHooks = append(a.beforeHooks, fn)
 }
 
-func (a *Agent) AddAfterHook(fn AfterToolCallFunc) {
+func (a *Agent) AddAfterHook(fn hooks.AfterToolCallFunc) {
 	a.afterHooks = append(a.afterHooks, fn)
 }
 
-func (a *Agent) emit(kind EventKind, data any) {
+func (a *Agent) emit(kind event.Kind, data any) {
 	select {
-	case a.Events <- Event{
+	case a.Events <- event.Event{
 		Timestamp: time.Now(),
 		Kind:      kind,
 		Source:    "core-loop",
@@ -113,14 +115,4 @@ func (a *Agent) ModelLabel() string {
 func (a *Agent) SetChat(chat *store.Chat) {
 	a.Chat = chat
 	a.session = NewSession(chat.ID, "")
-}
-
-func uniqueName(name string, counts map[string]int) string {
-	counts[name]++
-	if counts[name] == 1 {
-		return name
-	}
-	ext := filepath.Ext(name)
-	base := strings.TrimSuffix(name, ext)
-	return fmt.Sprintf("%s_%d%s", base, counts[name], ext)
 }

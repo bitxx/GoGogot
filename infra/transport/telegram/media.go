@@ -143,6 +143,103 @@ func (t *Transport) processPhoto(photos []tgbotapi.PhotoSize) (*transport.Attach
 	}, nil
 }
 
+func (t *Transport) processAudio(audio *tgbotapi.Audio) (*transport.Attachment, error) {
+	if audio.FileSize > maxGenericFileSize {
+		return nil, fmt.Errorf("audio too large (%d bytes)", audio.FileSize)
+	}
+	data, err := t.downloadFile(audio.FileID)
+	if err != nil {
+		return nil, err
+	}
+	filename := audio.FileName
+	if filename == "" {
+		filename = "audio.mp3"
+	}
+	mime := audio.MimeType
+	if mime == "" {
+		mime = "audio/mpeg"
+	}
+	return &transport.Attachment{Filename: filename, MimeType: mime, Data: data}, nil
+}
+
+func (t *Transport) processVoice(voice *tgbotapi.Voice) (*transport.Attachment, error) {
+	if voice.FileSize > maxGenericFileSize {
+		return nil, fmt.Errorf("voice too large (%d bytes)", voice.FileSize)
+	}
+	data, err := t.downloadFile(voice.FileID)
+	if err != nil {
+		return nil, err
+	}
+	mime := voice.MimeType
+	if mime == "" {
+		mime = "audio/ogg"
+	}
+	return &transport.Attachment{Filename: "voice.ogg", MimeType: mime, Data: data}, nil
+}
+
+func (t *Transport) processVideo(video *tgbotapi.Video) (*transport.Attachment, error) {
+	if video.FileSize > maxGenericFileSize {
+		return nil, fmt.Errorf("video too large (%d bytes)", video.FileSize)
+	}
+	data, err := t.downloadFile(video.FileID)
+	if err != nil {
+		return nil, err
+	}
+	mime := video.MimeType
+	if mime == "" {
+		mime = "video/mp4"
+	}
+	filename := video.FileName
+	if filename == "" {
+		filename = "video.mp4"
+	}
+	return &transport.Attachment{Filename: filename, MimeType: mime, Data: data}, nil
+}
+
+func (t *Transport) processVideoNote(vn *tgbotapi.VideoNote) (*transport.Attachment, error) {
+	if vn.FileSize > maxGenericFileSize {
+		return nil, fmt.Errorf("video note too large (%d bytes)", vn.FileSize)
+	}
+	data, err := t.downloadFile(vn.FileID)
+	if err != nil {
+		return nil, err
+	}
+	return &transport.Attachment{Filename: "videonote.mp4", MimeType: "video/mp4", Data: data}, nil
+}
+
+func (t *Transport) processAnimation(anim *tgbotapi.Animation) (*transport.Attachment, error) {
+	if anim.FileSize > maxGenericFileSize {
+		return nil, fmt.Errorf("animation too large (%d bytes)", anim.FileSize)
+	}
+	data, err := t.downloadFile(anim.FileID)
+	if err != nil {
+		return nil, err
+	}
+	mime := anim.MimeType
+	if mime == "" {
+		mime = "video/mp4"
+	}
+	filename := anim.FileName
+	if filename == "" {
+		filename = "animation.mp4"
+	}
+	return &transport.Attachment{Filename: filename, MimeType: mime, Data: data}, nil
+}
+
+func (t *Transport) processSticker(sticker *tgbotapi.Sticker) (*transport.Attachment, error) {
+	if sticker.IsAnimated {
+		return nil, nil
+	}
+	if sticker.FileSize > maxImageFileSize {
+		return nil, fmt.Errorf("sticker too large (%d bytes)", sticker.FileSize)
+	}
+	data, err := t.downloadFile(sticker.FileID)
+	if err != nil {
+		return nil, err
+	}
+	return &transport.Attachment{Filename: "sticker.webp", MimeType: "image/webp", Data: data}, nil
+}
+
 func extractZipFiles(data []byte) ([]transport.Attachment, error) {
 	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
