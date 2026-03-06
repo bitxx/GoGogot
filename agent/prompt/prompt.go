@@ -168,6 +168,9 @@ func buildDockerSection() string {
 
 func buildRuntimeSection(ctx PromptContext) string {
 	parts := []string{"os=Ubuntu (Docker)"}
+	if ctx.TransportName != "" {
+		parts = append(parts, "transport="+sanitizePromptValue(ctx.TransportName))
+	}
 	if ctx.ModelLabel != "" {
 		parts = append(parts, "model="+sanitizePromptValue(ctx.ModelLabel))
 	}

@@ -10,6 +10,7 @@ require (
 	github.com/openai/openai-go v1.12.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/zerolog v1.34.0
+	github.com/yuin/goldmark v1.7.16
 )
 
 require (

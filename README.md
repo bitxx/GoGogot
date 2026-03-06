@@ -1,12 +1,12 @@
-![GoGogot](https://octagon-lab.sfo3.cdn.digitaloceanspaces.com/gogogot.jpg)
+GoGogot
 
 # GoGogot — Lightweight OpenClaw Written in Go
 
-[![Go Version](https://img.shields.io/badge/go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![License](https://img.shields.io/github/license/aspasskiy/GoGogot)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/aspasskiy/GoGogot?style=flat)](https://github.com/aspasskiy/GoGogot/stargazers)
-[![Lines of code](https://img.shields.io/badge/lines%20of%20code-~4500-blue)](#)
-[![Docker](https://img.shields.io/badge/deploy-docker%20compose-2496ED?logo=docker&logoColor=white)](#deployment)
+[Go Version](https://go.dev)
+[License](LICENSE)
+[Stars](https://github.com/aspasskiy/GoGogot/stargazers)
+[Lines of code](#)
+[Docker](#deployment)
 
 An open-source, self-hosted personal AI agent written in Go. Deploy on your own server as a single ~15 MB binary — it runs shell commands, edits files, browses the web, manages persistent memory, and schedules tasks. A lightweight alternative to OpenClaw (Claude Code) in ~4,500 lines of Go. No frameworks, no plugins, no magic.
 
@@ -25,29 +25,31 @@ The core philosophy of GoGogot is built around being **lightweight, extensible, 
 
 ## Use Cases
 
-| Use Case | Example Prompt |
-| --- | --- |
-| 📰 **Daily Digest** | Find top 5 AI news from today, summarize each in 2 sentences, send me every morning at 9:00 |
-| 📊 **Report Generation** | Download sales data from this URL, calculate totals by region, generate a PDF report |
-| 📁 **File Processing** | Take these 12 screenshots, merge them into a single PDF, and send the file back |
-| 🔍 **Market Research** | Search the web for pricing of competitors X, Y, Z and make a comparison table |
-| 🖥️ **Server Monitoring** | Check disk and memory usage every hour, alert me in Telegram if anything exceeds 80% |
-| 🗃️ **Data Extraction** | Fetch this webpage, extract all email addresses and phone numbers into a CSV |
-| ⚙️ **Routine Automation** | Every Friday at 18:00, pull this week's git commits and send me a changelog summary |
+
+| Use Case                  | Example Prompt                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------- |
+| 📰 **Daily Digest**       | Find top 5 AI news from today, summarize each in 2 sentences, send me every morning at 9:00 |
+| 📊 **Report Generation**  | Download sales data from this URL, calculate totals by region, generate a PDF report        |
+| 📁 **File Processing**    | Take these 12 screenshots, merge them into a single PDF, and send the file back             |
+| 🔍 **Market Research**    | Search the web for pricing of competitors X, Y, Z and make a comparison table               |
+| 🖥️ **Server Monitoring** | Check disk and memory usage every hour, alert me in Telegram if anything exceeds 80%        |
+| 🗃️ **Data Extraction**   | Fetch this webpage, extract all email addresses and phone numbers into a CSV                |
+| ⚙️ **Routine Automation** | Every Friday at 18:00, pull this week's git commits and send me a changelog summary         |
+
 
 ## You Are In Control
 
 Everything is configured explicitly via environment variables passed at deploy time. API keys never leave your server — there is no cloud account, no SaaS dashboard, no telemetry, no phoning home.
 
 
-| Variable             | Purpose                                           |
-| -------------------- | ------------------------------------------------- |
-| `ANTHROPIC_API_KEY`  | Claude (direct API)                               |
+| Variable             | Purpose                                               |
+| -------------------- | ----------------------------------------------------- |
+| `ANTHROPIC_API_KEY`  | Claude (direct API)                                   |
 | `OPENROUTER_API_KEY` | DeepSeek, Gemini, MiniMax, Qwen, Llama via OpenRouter |
 | `GOGOGOT_MODEL`      | Model ID — see table below (default: first available) |
-| `TELEGRAM_BOT_TOKEN` | Your Telegram bot                                 |
-| `TELEGRAM_OWNER_ID`  | Only this user can talk to the bot                |
-| `BRAVE_API_KEY`      | Web search (optional)                             |
+| `TELEGRAM_BOT_TOKEN` | Your Telegram bot                                     |
+| `TELEGRAM_OWNER_ID`  | Only this user can talk to the bot                    |
+| `BRAVE_API_KEY`      | Web search (optional)                                 |
 
 
 ## Choosing a Model
@@ -66,14 +68,16 @@ If `GOGOGOT_MODEL` is not set, the first available provider is used.
 
 ### Built-in Models
 
-| ID         | Model                | Provider   | Context | Vision | Notes                        |
-| ---------- | -------------------- | ---------- | ------- | ------ | ---------------------------- |
-| `claude`   | Claude Sonnet 4.6    | Anthropic  | 200K    | Yes    | Best reasoning, highest cost |
-| `deepseek` | DeepSeek V3-0324     | OpenRouter | 128K    | No     | Best cost/quality ratio      |
-| `gemini`   | Gemini 2.5 Pro       | OpenRouter | 1M      | Yes    | Largest context window       |
-| `minimax`  | MiniMax M2.5         | OpenRouter | 1M      | No     | Cheap, good for routines     |
-| `qwen`     | Qwen3 235B A22B      | OpenRouter | 128K    | No     | Strong multilingual          |
-| `llama`    | Llama 4 Maverick     | OpenRouter | 1M      | Yes    | Open-source, good all-around |
+
+| ID         | Model             | Provider   | Context | Vision | Notes                        |
+| ---------- | ----------------- | ---------- | ------- | ------ | ---------------------------- |
+| `claude`   | Claude Sonnet 4.6 | Anthropic  | 200K    | Yes    | Best reasoning, highest cost |
+| `deepseek` | DeepSeek V3-0324  | OpenRouter | 128K    | No     | Best cost/quality ratio      |
+| `gemini`   | Gemini 2.5 Pro    | OpenRouter | 1M      | Yes    | Largest context window       |
+| `minimax`  | MiniMax M2.5      | OpenRouter | 1M      | No     | Cheap, good for routines     |
+| `qwen`     | Qwen3 235B A22B   | OpenRouter | 128K    | No     | Strong multilingual          |
+| `llama`    | Llama 4 Maverick  | OpenRouter | 1M      | Yes    | Open-source, good all-around |
+
 
 ### Adding Custom Models
 
@@ -109,28 +113,48 @@ You pick the price/quality tradeoff. All models work out of the box — switch w
 | Gemini 2.5 Pro                | $1.25                 | $10.00                 | ~$0.16             |
 | Claude Sonnet 4.6             | $5.00                 | $25.00                 | ~$0.50             |
 
-\* Typical session: ~50K input + ~10K output tokens.
 
+ Typical session: ~50K input + ~10K output tokens.
 
 For routine tasks — daily digests, file management, web lookups — DeepSeek or MiniMax are more than enough. Switch to Claude or Gemini for complex reasoning when you need it.
 
 ## Extensible by Design
 
-LLM providers and chat transports are clean Go interfaces. Adding a new model = editing a JSON file. Adding a new transport = implementing a few methods. No plugin system, no registry, no framework.
+No plugin system, no registry, no framework. Just Go interfaces and a JSON config.
 
-**LLM provider** — 3 methods:
+### Adding a model (no code changes)
+
+Any OpenAI-compatible or Anthropic-compatible API works out of the box. Add an entry to `models.json`, set the `format` field, restart:
+
+- `"format": "openai"` — OpenRouter, Together, Fireworks, any OpenAI-compatible endpoint
+- `"format": "anthropic"` — Anthropic direct API or compatible proxies
+
+See [Adding Custom Models](#adding-custom-models) above for the JSON schema.
+
+### Adding a new LLM backend (code)
+
+If you need a non-OpenAI, non-Anthropic wire format, implement the `Backend` interface — one method:
 
 ```go
-type LLM interface {
-    Call(ctx context.Context, messages []Message, opts CallOptions) (*Response, error)
-    ModelLabel() string
-    ContextWindow() int
+type Backend interface {
+    Call(ctx context.Context, model string, systemPrompt string,
+        messages []types.Message, tools []types.ToolDef, maxTokens int,
+    ) (*types.Response, error)
 }
 ```
 
-Ships with: **Anthropic** (native SDK) and **OpenAI-compatible** (OpenRouter — DeepSeek, Gemini, MiniMax, Qwen, Llama, etc.). Models configured via `models.json` — add any OpenRouter model without recompilation.
+Then register it in `llm/client.go`:
 
-**Transport** — 3 methods:
+```go
+case "myformat":
+    backend = mypkg.NewBackend(p.BaseURL, p.APIKey)
+```
+
+Ships with: **Anthropic** (native SDK) and **OpenAI-compatible** (OpenRouter, etc.).
+
+### Adding a new transport (code)
+
+Implement `Transport` — 3 methods:
 
 ```go
 type Transport interface {
@@ -140,7 +164,14 @@ type Transport interface {
 }
 ```
 
-Optional capabilities via extra interfaces: `FileSender`, `TypingNotifier`, `StatusUpdater`.
+Optionally implement `FileSender`, `TypingNotifier`, `StatusUpdater` for richer UX (file uploads, typing indicators, editable status messages).
+
+Then add a case in `cmd/main.go`:
+
+```go
+case "discord":
+    return discord.New(cfg.DiscordToken)
+```
 
 Ships with: **Telegram**. Want Discord, Slack, or Matrix? Implement 3 methods and plug it in.
 
@@ -149,60 +180,20 @@ Ships with: **Telegram**. Want Discord, Slack, or Matrix? Implement 3 methods an
 - **Telegram** — multi-chat, attachments (images, documents), typing indicators
 - **System access** — bash, read/write/edit files, system info
 - **Web** — search (Brave), fetch pages, HTTP requests, download files
+- **Identity** — persistent `soul.md` (agent personality) and `user.md` (owner profile), auto-evolving through conversations
 - **Memory** — persistent markdown files the agent reads and writes itself
+- **Skills** — reusable procedural knowledge the agent creates and consults itself
+- **Task planning** — session-scoped checklist for multi-step work
 - **Scheduling** — cron-based self-scheduling, persisted across restarts
 - **Compaction** — automatic context compression when approaching token limits
 - **Multi-model** — 6 built-in models (Claude, DeepSeek, Gemini, MiniMax, Qwen, Llama), add your own via `models.json`
 - **Observability** — structured event system (LLM calls, tool executions, errors)
 
-## Architecture
-
-```
-┌──────────┐     ┌────────┐     ┌───────┐     ┌─────┐
-│ Telegram │────▸│ Bridge │────▸│ Agent │────▸│ LLM │
-└──────────┘     └────────┘     └───┬───┘     └─────┘
-                                    │
-                                    ▼
-                               ┌─────────┐
-                               │  Tools  │
-                               └─────────┘
-                          bash, files, web,
-                        memory, scheduler, ...
-```
-
-The entire agent is one loop:
-
-```go
-for {
-    guardrails.Check()
-    maybeCompact()
-
-    response := llm.Call(session.Messages())
-
-    if no tool calls in response {
-        break // done, send final text to user
-    }
-
-    for each tool call {
-        result := tools.Execute(name, input)
-        session.Append(result)
-    }
-}
-```
-
-The LLM decides everything — when to plan, when to ask the user, when to self-correct. These are prompt strategies, not code constructs. Adding a new behavior = editing the system prompt.
-
 ## Tools
 
-17 built-in tools across 5 categories:
+27 built-in tools across 10 categories: shell, files, web, identity, memory, skills, system info, scheduling, transport, and task planning.
 
-- **System** — `bash`, `read_file`, `write_file`, `edit_file`, `list_files`, `system_info`
-- **Web** — `web_search` (Brave), `web_fetch`, `web_request`, `web_download`
-- **Memory** — `memory_list`, `memory_read`, `memory_write`
-- **Scheduling** — `schedule_add`, `schedule_list`, `schedule_remove`
-- **Transport** — `send_file`
-
-
+The LLM sees the full tool list and picks the right one for the job.
 
 ## Installation & Quick Start
 
@@ -242,8 +233,10 @@ go run cmd/main.go
 - [openai-go](https://github.com/openai/openai-go) — OpenRouter / OpenAI-compatible providers
 - [telegram-bot-api](https://github.com/go-telegram-bot-api/telegram-bot-api) — Telegram transport
 - [robfig/cron](https://github.com/robfig/cron) — scheduler
-- [uber/fx](https://github.com/uber-go/fx) — dependency injection
+- [goldmark](https://github.com/yuin/goldmark) — markdown parsing
 - [goquery](https://github.com/PuerkitoBio/goquery) — HTML parsing for web tools
+- [zerolog](https://github.com/rs/zerolog) — structured logging
+- [godotenv](https://github.com/joho/godotenv) — .env file loading
 
 ## License
 

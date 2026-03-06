@@ -28,11 +28,12 @@ func (t *Transport) sendAndGetID(chatID int64, markdownText string) int {
 }
 
 func (t *Transport) sendLong(chatID int64, text string) {
-	for _, chunk := range splitMessage(text) {
-		msg := tgbotapi.NewMessage(chatID, chunk)
-		msg.ParseMode = tgbotapi.ModeMarkdown
+	for _, chunk := range FormatHTMLChunks(text, maxMessageLen) {
+		msg := tgbotapi.NewMessage(chatID, chunk.HTML)
+		msg.ParseMode = tgbotapi.ModeHTML
 		if _, err := t.api.Send(msg); err != nil {
-			log.Warn().Err(err).Msg("telegram markdown send failed, falling back to plain text")
+			log.Warn().Err(err).Msg("telegram HTML send failed, falling back to plain text")
+			msg.Text = chunk.Text
 			msg.ParseMode = ""
 			if _, err := t.api.Send(msg); err != nil {
 				log.Error().Err(err).Msg("telegram plain text send failed")
@@ -68,10 +69,11 @@ func SendMessage(token string, chatID int64, text string) error {
 	if err != nil {
 		return fmt.Errorf("telegram init: %w", err)
 	}
-	for _, chunk := range splitMessage(text) {
-		msg := tgbotapi.NewMessage(chatID, chunk)
-		msg.ParseMode = tgbotapi.ModeMarkdown
+	for _, chunk := range FormatHTMLChunks(text, maxMessageLen) {
+		msg := tgbotapi.NewMessage(chatID, chunk.HTML)
+		msg.ParseMode = tgbotapi.ModeHTML
 		if _, err := api.Send(msg); err != nil {
+			msg.Text = chunk.Text
 			msg.ParseMode = ""
 			if _, err := api.Send(msg); err != nil {
 				return fmt.Errorf("telegram send: %w", err)
@@ -83,25 +85,6 @@ func SendMessage(token string, chatID int64, text string) error {
 
 
 const maxMessageLen = 4000
-
-func splitMessage(text string) []string {
-	var chunks []string
-	for len(text) > 0 {
-		chunk := text
-		if len(chunk) > maxMessageLen {
-			cut := strings.LastIndex(chunk[:maxMessageLen], "\n")
-			if cut < maxMessageLen/2 {
-				cut = maxMessageLen
-			}
-			chunk = text[:cut]
-			text = text[cut:]
-		} else {
-			text = ""
-		}
-		chunks = append(chunks, chunk)
-	}
-	return chunks
-}
 
 func escapeMarkdown(s string) string {
 	replacer := strings.NewReplacer(
