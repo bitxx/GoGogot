@@ -137,7 +137,7 @@ Models are defined in `models.json`. Defaults are compiled into the binary, but 
 ]
 ```
 
-Copy an entry, change 3 fields, restart. No recompilation needed. The `api_key_env` field references the environment variable name — keys stay in `.env`, the config is safe to commit.
+Copy an entry, change 3 fields, restart. No recompilation needed. The `api_key_env` field references the environment variable name — keys are passed via environment variables in `docker-compose.yml`, the config is safe to commit.
 
 ## Cost
 
@@ -249,9 +249,10 @@ The LLM sees the full tool list and picks the right one for the job.
 git clone https://github.com/aspasskiy/GoGogot.git
 cd GoGogot
 
-# Configure
-cp .env.example .env
-# Edit .env: set TELEGRAM_BOT_TOKEN, TELEGRAM_OWNER_ID, API keys
+# Configure — set env vars directly or export them before running
+export TELEGRAM_BOT_TOKEN=...
+export TELEGRAM_OWNER_ID=...
+export ANTHROPIC_API_KEY=...       # or OPENROUTER_API_KEY
 
 # Run
 docker compose -f deploy/docker-compose.yml up -d
@@ -277,7 +278,6 @@ go run cmd/main.go
 - [goldmark](https://github.com/yuin/goldmark) — markdown parsing
 - [goquery](https://github.com/PuerkitoBio/goquery) — HTML parsing for web tools
 - [zerolog](https://github.com/rs/zerolog) — structured logging
-- [godotenv](https://github.com/joho/godotenv) — .env file loading
 
 ## License
 

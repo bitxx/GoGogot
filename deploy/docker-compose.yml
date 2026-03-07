@@ -2,9 +2,15 @@ services:
   gogogot:
     image: gogogot:latest
     restart: unless-stopped
-    env_file: .env
     environment:
-      - GOGOGOT_DATA_DIR=/data
+      GOGOGOT_DATA_DIR: /data
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_OWNER_ID: ${TELEGRAM_OWNER_ID}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      BRAVE_API_KEY: ${BRAVE_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: ${TZ:-UTC}
     volumes:
       - ./data:/data
       - ./work:/work

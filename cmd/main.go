@@ -20,13 +20,10 @@ import (
 	"gogogot/tools"
 	"gogogot/tools/system"
 
-	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 )
 
 func main() {
-	_ = godotenv.Load()
-
 	modelFlag := flag.String("model", "", "model ID from models.json (default: first available)")
 	flag.Parse()
 
