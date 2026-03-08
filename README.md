@@ -1,3 +1,5 @@
+![GoGogot](https://octagon-lab.sfo3.cdn.digitaloceanspaces.com/gogogot.jpg)
+
 # GoGogot — Lightweight OpenClaw Written in Go
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/aspasskiy/GoGogot?style=flat-square)](https://go.dev)
