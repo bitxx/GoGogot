@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/anthropics/anthropic-sdk-go v1.26.0
-	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
+	github.com/go-telegram/bot v1.19.0
 	github.com/openai/openai-go v1.12.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/zerolog v1.34.0

@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,21 +13,23 @@ import (
 
 	"gogogot/transport"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 )
 
 const (
-	maxTextFileSize    = 512 * 1024       // 512 KB
-	maxImageFileSize   = 10 * 1024 * 1024 // 10 MB
-	maxGenericFileSize = 20 * 1024 * 1024 // 20 MB
+	maxTextFileSize    = 512 * 1024
+	maxImageFileSize   = 10 * 1024 * 1024
+	maxGenericFileSize = 20 * 1024 * 1024
+	maxArchiveEntries  = 20
 )
 
-func (t *Transport) downloadFile(fileID string) ([]byte, error) {
-	file, err := t.api.GetFile(tgbotapi.FileConfig{FileID: fileID})
+func (t *Transport) downloadFile(ctx context.Context, fileID string) ([]byte, error) {
+	file, err := t.b.GetFile(ctx, &bot.GetFileParams{FileID: fileID})
 	if err != nil {
 		return nil, fmt.Errorf("get file info: %w", err)
 	}
-	url := file.Link(t.api.Token)
+	url := t.b.FileDownloadLink(file)
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("download: %w", err)
@@ -55,14 +58,14 @@ func isTextMIME(mime string) bool {
 	return false
 }
 
-func (t *Transport) processDocument(doc *tgbotapi.Document) ([]transport.Attachment, error) {
+func (t *Transport) processDocument(ctx context.Context, doc *models.Document) ([]transport.Attachment, error) {
 	mime := doc.MimeType
 
 	if mime == "application/zip" || mime == "application/x-zip-compressed" || strings.HasSuffix(strings.ToLower(doc.FileName), ".zip") {
-		if doc.FileSize > 20*1024*1024 {
+		if doc.FileSize > maxGenericFileSize {
 			return nil, fmt.Errorf("zip file too large (%d bytes)", doc.FileSize)
 		}
-		data, err := t.downloadFile(doc.FileID)
+		data, err := t.downloadFile(ctx, doc.FileID)
 		if err != nil {
 			return nil, err
 		}
@@ -70,10 +73,10 @@ func (t *Transport) processDocument(doc *tgbotapi.Document) ([]transport.Attachm
 	}
 
 	if mime == "application/gzip" || mime == "application/x-gzip" || strings.HasSuffix(strings.ToLower(doc.FileName), ".tar.gz") || strings.HasSuffix(strings.ToLower(doc.FileName), ".tgz") {
-		if doc.FileSize > 20*1024*1024 {
+		if doc.FileSize > maxGenericFileSize {
 			return nil, fmt.Errorf("tar.gz file too large (%d bytes)", doc.FileSize)
 		}
-		data, err := t.downloadFile(doc.FileID)
+		data, err := t.downloadFile(ctx, doc.FileID)
 		if err != nil {
 			return nil, err
 		}
@@ -84,47 +87,35 @@ func (t *Transport) processDocument(doc *tgbotapi.Document) ([]transport.Attachm
 		if doc.FileSize > maxImageFileSize {
 			return nil, fmt.Errorf("image too large (%d bytes)", doc.FileSize)
 		}
-		data, err := t.downloadFile(doc.FileID)
+		data, err := t.downloadFile(ctx, doc.FileID)
 		if err != nil {
 			return nil, err
 		}
-		return []transport.Attachment{{
-			Filename: doc.FileName,
-			MimeType: mime,
-			Data:     data,
-		}}, nil
+		return []transport.Attachment{{Filename: doc.FileName, MimeType: mime, Data: data}}, nil
 	}
 
 	if isTextMIME(mime) || mime == "" || mime == "application/octet-stream" {
 		if doc.FileSize > maxTextFileSize {
 			return nil, fmt.Errorf("text file too large (%d bytes)", doc.FileSize)
 		}
-		data, err := t.downloadFile(doc.FileID)
+		data, err := t.downloadFile(ctx, doc.FileID)
 		if err != nil {
 			return nil, err
 		}
-		return []transport.Attachment{{
-			Filename: doc.FileName,
-			MimeType: "text/plain",
-			Data:     data,
-		}}, nil
+		return []transport.Attachment{{Filename: doc.FileName, MimeType: "text/plain", Data: data}}, nil
 	}
 
 	if doc.FileSize > maxGenericFileSize {
 		return nil, fmt.Errorf("file too large (%d bytes, max %d)", doc.FileSize, maxGenericFileSize)
 	}
-	data, err := t.downloadFile(doc.FileID)
+	data, err := t.downloadFile(ctx, doc.FileID)
 	if err != nil {
 		return nil, err
 	}
-	return []transport.Attachment{{
-		Filename: doc.FileName,
-		MimeType: mime,
-		Data:     data,
-	}}, nil
+	return []transport.Attachment{{Filename: doc.FileName, MimeType: mime, Data: data}}, nil
 }
 
-func (t *Transport) processPhoto(photos []tgbotapi.PhotoSize) (*transport.Attachment, error) {
+func (t *Transport) processPhoto(ctx context.Context, photos []models.PhotoSize) ([]transport.Attachment, error) {
 	if len(photos) == 0 {
 		return nil, nil
 	}
@@ -132,22 +123,18 @@ func (t *Transport) processPhoto(photos []tgbotapi.PhotoSize) (*transport.Attach
 	if largest.FileSize > maxImageFileSize {
 		return nil, fmt.Errorf("photo too large (%d bytes)", largest.FileSize)
 	}
-	data, err := t.downloadFile(largest.FileID)
+	data, err := t.downloadFile(ctx, largest.FileID)
 	if err != nil {
 		return nil, err
 	}
-	return &transport.Attachment{
-		Filename: "photo.jpg",
-		MimeType: "image/jpeg",
-		Data:     data,
-	}, nil
+	return []transport.Attachment{{Filename: "photo.jpg", MimeType: "image/jpeg", Data: data}}, nil
 }
 
-func (t *Transport) processAudio(audio *tgbotapi.Audio) (*transport.Attachment, error) {
+func (t *Transport) processAudio(ctx context.Context, audio *models.Audio) ([]transport.Attachment, error) {
 	if audio.FileSize > maxGenericFileSize {
 		return nil, fmt.Errorf("audio too large (%d bytes)", audio.FileSize)
 	}
-	data, err := t.downloadFile(audio.FileID)
+	data, err := t.downloadFile(ctx, audio.FileID)
 	if err != nil {
 		return nil, err
 	}
@@ -159,14 +146,14 @@ func (t *Transport) processAudio(audio *tgbotapi.Audio) (*transport.Attachment, 
 	if mime == "" {
 		mime = "audio/mpeg"
 	}
-	return &transport.Attachment{Filename: filename, MimeType: mime, Data: data}, nil
+	return []transport.Attachment{{Filename: filename, MimeType: mime, Data: data}}, nil
 }
 
-func (t *Transport) processVoice(voice *tgbotapi.Voice) (*transport.Attachment, error) {
+func (t *Transport) processVoice(ctx context.Context, voice *models.Voice) ([]transport.Attachment, error) {
 	if voice.FileSize > maxGenericFileSize {
 		return nil, fmt.Errorf("voice too large (%d bytes)", voice.FileSize)
 	}
-	data, err := t.downloadFile(voice.FileID)
+	data, err := t.downloadFile(ctx, voice.FileID)
 	if err != nil {
 		return nil, err
 	}
@@ -174,14 +161,14 @@ func (t *Transport) processVoice(voice *tgbotapi.Voice) (*transport.Attachment, 
 	if mime == "" {
 		mime = "audio/ogg"
 	}
-	return &transport.Attachment{Filename: "voice.ogg", MimeType: mime, Data: data}, nil
+	return []transport.Attachment{{Filename: "voice.ogg", MimeType: mime, Data: data}}, nil
 }
 
-func (t *Transport) processVideo(video *tgbotapi.Video) (*transport.Attachment, error) {
+func (t *Transport) processVideo(ctx context.Context, video *models.Video) ([]transport.Attachment, error) {
 	if video.FileSize > maxGenericFileSize {
 		return nil, fmt.Errorf("video too large (%d bytes)", video.FileSize)
 	}
-	data, err := t.downloadFile(video.FileID)
+	data, err := t.downloadFile(ctx, video.FileID)
 	if err != nil {
 		return nil, err
 	}
@@ -193,25 +180,25 @@ func (t *Transport) processVideo(video *tgbotapi.Video) (*transport.Attachment, 
 	if filename == "" {
 		filename = "video.mp4"
 	}
-	return &transport.Attachment{Filename: filename, MimeType: mime, Data: data}, nil
+	return []transport.Attachment{{Filename: filename, MimeType: mime, Data: data}}, nil
 }
 
-func (t *Transport) processVideoNote(vn *tgbotapi.VideoNote) (*transport.Attachment, error) {
+func (t *Transport) processVideoNote(ctx context.Context, vn *models.VideoNote) ([]transport.Attachment, error) {
 	if vn.FileSize > maxGenericFileSize {
 		return nil, fmt.Errorf("video note too large (%d bytes)", vn.FileSize)
 	}
-	data, err := t.downloadFile(vn.FileID)
+	data, err := t.downloadFile(ctx, vn.FileID)
 	if err != nil {
 		return nil, err
 	}
-	return &transport.Attachment{Filename: "videonote.mp4", MimeType: "video/mp4", Data: data}, nil
+	return []transport.Attachment{{Filename: "videonote.mp4", MimeType: "video/mp4", Data: data}}, nil
 }
 
-func (t *Transport) processAnimation(anim *tgbotapi.Animation) (*transport.Attachment, error) {
+func (t *Transport) processAnimation(ctx context.Context, anim *models.Animation) ([]transport.Attachment, error) {
 	if anim.FileSize > maxGenericFileSize {
 		return nil, fmt.Errorf("animation too large (%d bytes)", anim.FileSize)
 	}
-	data, err := t.downloadFile(anim.FileID)
+	data, err := t.downloadFile(ctx, anim.FileID)
 	if err != nil {
 		return nil, err
 	}
@@ -223,21 +210,29 @@ func (t *Transport) processAnimation(anim *tgbotapi.Animation) (*transport.Attac
 	if filename == "" {
 		filename = "animation.mp4"
 	}
-	return &transport.Attachment{Filename: filename, MimeType: mime, Data: data}, nil
+	return []transport.Attachment{{Filename: filename, MimeType: mime, Data: data}}, nil
 }
 
-func (t *Transport) processSticker(sticker *tgbotapi.Sticker) (*transport.Attachment, error) {
+func (t *Transport) processSticker(ctx context.Context, sticker *models.Sticker) ([]transport.Attachment, error) {
 	if sticker.IsAnimated {
 		return nil, nil
 	}
 	if sticker.FileSize > maxImageFileSize {
 		return nil, fmt.Errorf("sticker too large (%d bytes)", sticker.FileSize)
 	}
-	data, err := t.downloadFile(sticker.FileID)
+	data, err := t.downloadFile(ctx, sticker.FileID)
 	if err != nil {
 		return nil, err
 	}
-	return &transport.Attachment{Filename: "sticker.webp", MimeType: "image/webp", Data: data}, nil
+	return []transport.Attachment{{Filename: "sticker.webp", MimeType: "image/webp", Data: data}}, nil
+}
+
+func shouldIncludeArchiveEntry(name string) (isText, isImage bool) {
+	if strings.HasPrefix(name, ".") || strings.Contains(name, "/.") || strings.Contains(name, "__MACOSX") {
+		return false, false
+	}
+	lower := strings.ToLower(name)
+	return isTextExtension(lower), isImageExtension(lower)
 }
 
 func extractZipFiles(data []byte) ([]transport.Attachment, error) {
@@ -251,21 +246,14 @@ func extractZipFiles(data []byte) ([]transport.Attachment, error) {
 		if file.FileInfo().IsDir() {
 			continue
 		}
-		if strings.HasPrefix(file.Name, ".") || strings.Contains(file.Name, "/.") || strings.Contains(file.Name, "__MACOSX") {
-			continue
-		}
-
-		ext := strings.ToLower(file.Name)
-		isText := isTextExtension(ext)
-		isImage := isImageExtension(ext)
-
+		isText, isImage := shouldIncludeArchiveEntry(file.Name)
 		if !isText && !isImage {
 			continue
 		}
-		if file.UncompressedSize64 > maxTextFileSize && isText {
+		if isText && file.UncompressedSize64 > maxTextFileSize {
 			continue
 		}
-		if file.UncompressedSize64 > maxImageFileSize && isImage {
+		if isImage && file.UncompressedSize64 > maxImageFileSize {
 			continue
 		}
 
@@ -273,7 +261,6 @@ func extractZipFiles(data []byte) ([]transport.Attachment, error) {
 		if err != nil {
 			continue
 		}
-
 		content, err := io.ReadAll(rc)
 		rc.Close()
 		if err != nil {
@@ -282,11 +269,10 @@ func extractZipFiles(data []byte) ([]transport.Attachment, error) {
 
 		attachments = append(attachments, transport.Attachment{
 			Filename: file.Name,
-			MimeType: mimeFromExtension(ext, isImage),
+			MimeType: mimeFromExtension(strings.ToLower(file.Name), isImage),
 			Data:     content,
 		})
-
-		if len(attachments) >= 20 {
+		if len(attachments) >= maxArchiveEntries {
 			break
 		}
 	}
@@ -312,25 +298,18 @@ func extractTarGzFiles(data []byte) ([]transport.Attachment, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to read tar: %w", err)
 		}
-
 		if header.Typeflag != tar.TypeReg {
 			continue
 		}
-		if strings.HasPrefix(header.Name, ".") || strings.Contains(header.Name, "/.") || strings.Contains(header.Name, "__MACOSX") {
-			continue
-		}
 
-		ext := strings.ToLower(header.Name)
-		isText := isTextExtension(ext)
-		isImage := isImageExtension(ext)
-
+		isText, isImage := shouldIncludeArchiveEntry(header.Name)
 		if !isText && !isImage {
 			continue
 		}
-		if header.Size > maxTextFileSize && isText {
+		if isText && header.Size > maxTextFileSize {
 			continue
 		}
-		if header.Size > maxImageFileSize && isImage {
+		if isImage && header.Size > maxImageFileSize {
 			continue
 		}
 
@@ -341,11 +320,10 @@ func extractTarGzFiles(data []byte) ([]transport.Attachment, error) {
 
 		attachments = append(attachments, transport.Attachment{
 			Filename: header.Name,
-			MimeType: mimeFromExtension(ext, isImage),
+			MimeType: mimeFromExtension(strings.ToLower(header.Name), isImage),
 			Data:     content,
 		})
-
-		if len(attachments) >= 20 {
+		if len(attachments) >= maxArchiveEntries {
 			break
 		}
 	}

@@ -112,6 +112,36 @@ func selectProvider(cfg *config.Config) (*llm.Provider, error) {
 	return nil, fmt.Errorf("unknown model %q", cfg.Model)
 }
 
+type storeAdapter struct{}
+
+func (storeAdapter) ListChats() ([]telegram.ChatInfo, error) {
+	chats, err := store.ListChats()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]telegram.ChatInfo, len(chats))
+	for i, c := range chats {
+		out[i] = telegram.ChatInfo{ID: c.ID, Title: c.Title, UpdatedAt: c.UpdatedAt}
+	}
+	return out, nil
+}
+
+func (storeAdapter) GetExternalMapping(channelID string) (string, error) {
+	return store.GetExternalMapping(channelID)
+}
+
+func (storeAdapter) ListMemory() ([]telegram.MemoryFileInfo, error) {
+	files, err := store.ListMemory()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]telegram.MemoryFileInfo, len(files))
+	for i, f := range files {
+		out[i] = telegram.MemoryFileInfo{Name: f.Name, Size: f.Size}
+	}
+	return out, nil
+}
+
 func buildTransport(cfg *config.Config) (*telegram.Transport, error) {
 	switch cfg.Transport {
 	case "telegram":
@@ -121,7 +151,8 @@ func buildTransport(cfg *config.Config) (*telegram.Transport, error) {
 		if cfg.TelegramOwnerID == 0 {
 			return nil, fmt.Errorf("TELEGRAM_OWNER_ID is required for telegram transport")
 		}
-		return telegram.New(cfg.TelegramToken, cfg.TelegramOwnerID)
+		sa := storeAdapter{}
+		return telegram.New(cfg.TelegramToken, cfg.TelegramOwnerID, sa, sa)
 	default:
 		return nil, fmt.Errorf("unknown transport: %s", cfg.Transport)
 	}

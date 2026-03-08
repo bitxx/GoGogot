@@ -6,49 +6,64 @@ import (
 	"strings"
 	"time"
 
-	"gogogot/store"
 	"gogogot/transport"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
 )
 
-func (t *Transport) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery, handler transport.Handler) {
+func (t *Transport) handleCallback(ctx context.Context, cb *models.CallbackQuery) {
 	if cb.From.ID != t.ownerID {
 		return
 	}
 
 	data := cb.Data
-	if !strings.HasPrefix(data, "switch_chat:") {
+	if !strings.HasPrefix(data, callbackPrefix) {
 		return
 	}
 
-	sofieID := strings.TrimPrefix(data, "switch_chat:")
-	chatID := cb.Message.Chat.ID
-	channelID := fmt.Sprintf("tg_%d", chatID)
+	sofieID := strings.TrimPrefix(data, callbackPrefix)
+
+	var chatID int64
+	var messageID int
+	if cb.Message.Message != nil {
+		chatID = cb.Message.Message.Chat.ID
+		messageID = cb.Message.Message.ID
+	} else if cb.Message.InaccessibleMessage != nil {
+		chatID = cb.Message.InaccessibleMessage.Chat.ID
+		messageID = cb.Message.InaccessibleMessage.MessageID
+	} else {
+		return
+	}
+	channelID := fmt.Sprintf("%s%d", channelPrefix, chatID)
 
 	cmd := &transport.Command{
 		Name:   transport.CmdSwitchChat,
 		Args:   map[string]string{"chat_id": sofieID},
 		Result: &transport.CommandResult{},
 	}
-	handler(ctx, transport.Message{ChannelID: channelID, Command: cmd})
+	t.handler(ctx, transport.Message{ChannelID: channelID, Command: cmd})
 	if cmd.Result.Error != nil {
-		answer := tgbotapi.NewCallback(cb.ID, "Error: "+cmd.Result.Error.Error())
-		_, _ = t.api.Request(answer)
+		t.b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: cb.ID,
+			Text:            "Error: " + cmd.Result.Error.Error(),
+		})
 		return
 	}
 
 	title := cmd.Result.Data["title"]
 
-	answer := tgbotapi.NewCallback(cb.ID, "Switched to: "+title)
-	_, _ = t.api.Request(answer)
+	t.b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+		CallbackQueryID: cb.ID,
+		Text:            "Switched to: " + title,
+	})
 
-	text := fmt.Sprintf("✅ Switched to: *%s*", escapeMarkdown(title))
-	t.editMessage(chatID, cb.Message.MessageID, text)
+	text := fmt.Sprintf("✅ Switched to: *%s*", bot.EscapeMarkdown(title))
+	t.editMessage(ctx, chatID, messageID, text)
 }
 
-func (t *Transport) handleMediaGroup(ctx context.Context, msg *tgbotapi.Message, handler transport.Handler) {
+func (t *Transport) handleMediaGroup(ctx context.Context, msg *models.Message) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -58,27 +73,86 @@ func (t *Transport) handleMediaGroup(ctx context.Context, msg *tgbotapi.Message,
 		buf.timer.Reset(1 * time.Second)
 	} else {
 		buf := &mediaGroupBuffer{
-			messages: []*tgbotapi.Message{msg},
+			messages: []*models.Message{msg},
 		}
 		buf.timer = time.AfterFunc(1*time.Second, func() {
+			if ctx.Err() != nil {
+				return
+			}
 			t.mu.Lock()
 			msgs := t.mediaGroups[groupID].messages
 			delete(t.mediaGroups, groupID)
 			t.mu.Unlock()
 
-			t.convertAndDispatch(ctx, msgs, handler)
+			t.convertAndDispatch(ctx, msgs)
 		})
 		t.mediaGroups[groupID] = buf
 	}
 }
 
-func (t *Transport) convertAndDispatch(ctx context.Context, msgs []*tgbotapi.Message, handler transport.Handler) {
+type mediaExtractor struct {
+	check   func(*models.Message) bool
+	process func(t *Transport, ctx context.Context, msg *models.Message) ([]transport.Attachment, error)
+}
+
+var mediaExtractors = []mediaExtractor{
+	{
+		check: func(m *models.Message) bool { return m.Animation != nil },
+		process: func(t *Transport, ctx context.Context, m *models.Message) ([]transport.Attachment, error) {
+			return t.processAnimation(ctx, m.Animation)
+		},
+	},
+	{
+		check: func(m *models.Message) bool { return m.Document != nil && m.Animation == nil },
+		process: func(t *Transport, ctx context.Context, m *models.Message) ([]transport.Attachment, error) {
+			return t.processDocument(ctx, m.Document)
+		},
+	},
+	{
+		check: func(m *models.Message) bool { return len(m.Photo) > 0 },
+		process: func(t *Transport, ctx context.Context, m *models.Message) ([]transport.Attachment, error) {
+			return t.processPhoto(ctx, m.Photo)
+		},
+	},
+	{
+		check: func(m *models.Message) bool { return m.Audio != nil },
+		process: func(t *Transport, ctx context.Context, m *models.Message) ([]transport.Attachment, error) {
+			return t.processAudio(ctx, m.Audio)
+		},
+	},
+	{
+		check: func(m *models.Message) bool { return m.Voice != nil },
+		process: func(t *Transport, ctx context.Context, m *models.Message) ([]transport.Attachment, error) {
+			return t.processVoice(ctx, m.Voice)
+		},
+	},
+	{
+		check: func(m *models.Message) bool { return m.Video != nil },
+		process: func(t *Transport, ctx context.Context, m *models.Message) ([]transport.Attachment, error) {
+			return t.processVideo(ctx, m.Video)
+		},
+	},
+	{
+		check: func(m *models.Message) bool { return m.VideoNote != nil },
+		process: func(t *Transport, ctx context.Context, m *models.Message) ([]transport.Attachment, error) {
+			return t.processVideoNote(ctx, m.VideoNote)
+		},
+	},
+	{
+		check: func(m *models.Message) bool { return m.Sticker != nil },
+		process: func(t *Transport, ctx context.Context, m *models.Message) ([]transport.Attachment, error) {
+			return t.processSticker(ctx, m.Sticker)
+		},
+	},
+}
+
+func (t *Transport) convertAndDispatch(ctx context.Context, msgs []*models.Message) {
 	if len(msgs) == 0 {
 		return
 	}
 
 	chatID := msgs[0].Chat.ID
-	channelID := fmt.Sprintf("tg_%d", chatID)
+	channelID := fmt.Sprintf("%s%d", channelPrefix, chatID)
 	var textParts []string
 	var attachments []transport.Attachment
 
@@ -91,73 +165,14 @@ func (t *Transport) convertAndDispatch(ctx context.Context, msgs []*tgbotapi.Mes
 			textParts = append(textParts, text)
 		}
 
-		if msg.Animation != nil {
-			att, err := t.processAnimation(msg.Animation)
-			if err != nil {
-				log.Error().Err(err).Msg("failed to process animation")
-			} else if att != nil {
-				attachments = append(attachments, *att)
-			}
-		} else if msg.Document != nil {
-			att, err := t.processDocument(msg.Document)
-			if err != nil {
-				log.Error().Err(err).Msg("failed to process document")
-			} else {
-				attachments = append(attachments, att...)
-			}
-		}
-
-		if len(msg.Photo) > 0 {
-			att, err := t.processPhoto(msg.Photo)
-			if err != nil {
-				log.Error().Err(err).Msg("failed to process photo")
-			} else {
-				attachments = append(attachments, *att)
-			}
-		}
-
-		if msg.Audio != nil {
-			att, err := t.processAudio(msg.Audio)
-			if err != nil {
-				log.Error().Err(err).Msg("failed to process audio")
-			} else if att != nil {
-				attachments = append(attachments, *att)
-			}
-		}
-
-		if msg.Voice != nil {
-			att, err := t.processVoice(msg.Voice)
-			if err != nil {
-				log.Error().Err(err).Msg("failed to process voice")
-			} else if att != nil {
-				attachments = append(attachments, *att)
-			}
-		}
-
-		if msg.Video != nil {
-			att, err := t.processVideo(msg.Video)
-			if err != nil {
-				log.Error().Err(err).Msg("failed to process video")
-			} else if att != nil {
-				attachments = append(attachments, *att)
-			}
-		}
-
-		if msg.VideoNote != nil {
-			att, err := t.processVideoNote(msg.VideoNote)
-			if err != nil {
-				log.Error().Err(err).Msg("failed to process video note")
-			} else if att != nil {
-				attachments = append(attachments, *att)
-			}
-		}
-
-		if msg.Sticker != nil {
-			att, err := t.processSticker(msg.Sticker)
-			if err != nil {
-				log.Error().Err(err).Msg("failed to process sticker")
-			} else if att != nil {
-				attachments = append(attachments, *att)
+		for _, ex := range mediaExtractors {
+			if ex.check(msg) {
+				atts, err := ex.process(t, ctx, msg)
+				if err != nil {
+					log.Error().Err(err).Msg("failed to process media")
+				} else {
+					attachments = append(attachments, atts...)
+				}
 			}
 		}
 
@@ -220,44 +235,43 @@ func (t *Transport) convertAndDispatch(ctx context.Context, msgs []*tgbotapi.Mes
 		Int64("chat_id", chatID).
 		Int("text_len", len(text)).
 		Int("attachments", len(attachments)).
-		Str("from", msgs[0].From.UserName).
 		Msg("telegram incoming message")
 
 	if strings.HasPrefix(text, "/") {
 		cmdName := strings.Fields(text)[0]
 		if cmdName == "/stop" {
 			cmd := &transport.Command{Name: transport.CmdStop, Result: &transport.CommandResult{}}
-			handler(ctx, transport.Message{ChannelID: channelID, Command: cmd})
+			t.handler(ctx, transport.Message{ChannelID: channelID, Command: cmd})
 			return
 		}
 		log.Info().Str("cmd", text).Msg("command received")
-		t.handleCommand(ctx, chatID, channelID, text, handler)
+		t.handleCommand(ctx, chatID, channelID, text)
 		return
 	}
 
-	handler(ctx, transport.Message{
+	t.handler(ctx, transport.Message{
 		ChannelID:   channelID,
 		Text:        text,
 		Attachments: attachments,
 	})
 }
 
-func (t *Transport) handleCommand(ctx context.Context, chatID int64, channelID, text string, handler transport.Handler) {
+func (t *Transport) handleCommand(ctx context.Context, chatID int64, channelID, text string) {
 	parts := strings.Fields(text)
 	cmdText := parts[0]
 
 	switch cmdText {
 	case "/start", "/new":
 		cmd := &transport.Command{Name: transport.CmdNewChat, Result: &transport.CommandResult{}}
-		handler(ctx, transport.Message{ChannelID: channelID, Command: cmd})
+		t.handler(ctx, transport.Message{ChannelID: channelID, Command: cmd})
 		if cmd.Result.Error != nil {
-			t.send(chatID, "Error: "+escapeMarkdown(cmd.Result.Error.Error()))
+			t.send(ctx, chatID, "Error: "+bot.EscapeMarkdown(cmd.Result.Error.Error()))
 			return
 		}
-		t.send(chatID, "✨ New chat started\\.")
+		t.send(ctx, chatID, "✨ New chat started\\.")
 
 	case "/help":
-		t.send(chatID, "*Commands:*\n"+
+		t.send(ctx, chatID, "*Commands:*\n"+
 			"/new — start a fresh chat\n"+
 			"/chats — list and switch chats\n"+
 			"/memory — list memory files\n"+
@@ -265,24 +279,23 @@ func (t *Transport) handleCommand(ctx context.Context, chatID int64, channelID, 
 			"/help — show this help")
 
 	case "/chats":
-		chats, err := store.ListChats()
+		chats, err := t.chatLister.ListChats()
 		if err != nil {
-			t.send(chatID, "Error: "+escapeMarkdown(err.Error()))
+			t.send(ctx, chatID, "Error: "+bot.EscapeMarkdown(err.Error()))
 			return
 		}
 		if len(chats) == 0 {
-			t.send(chatID, "No chats yet\\. Send a message to start one\\!")
+			t.send(ctx, chatID, "No chats yet\\. Send a message to start one\\!")
 			return
 		}
 
-		currentID, _ := store.GetExternalMapping(channelID)
+		currentID, _ := t.chatLister.GetExternalMapping(channelID)
 
-		const maxChats = 20
-		if len(chats) > maxChats {
-			chats = chats[:maxChats]
+		if len(chats) > maxChatsShown {
+			chats = chats[:maxChatsShown]
 		}
 
-		var rows [][]tgbotapi.InlineKeyboardButton
+		var rows [][]models.InlineKeyboardButton
 		for _, c := range chats {
 			title := c.Title
 			if title == "" {
@@ -296,35 +309,37 @@ func (t *Transport) handleCommand(ctx context.Context, chatID int64, channelID, 
 			if c.ID == currentID {
 				label = "● " + label
 			}
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(label, "switch_chat:"+c.ID),
-			))
+			rows = append(rows, []models.InlineKeyboardButton{
+				{Text: label, CallbackData: callbackPrefix + c.ID},
+			})
 		}
 
-		msg := tgbotapi.NewMessage(chatID, "💬 Your chats:")
-		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
-		if _, err := t.api.Send(msg); err != nil {
-			log.Error().Err(err).Msg("telegram send failed")
-		}
+		t.b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "💬 Your chats:",
+			ReplyMarkup: &models.InlineKeyboardMarkup{
+				InlineKeyboard: rows,
+			},
+		})
 
 	case "/memory":
-		files, err := store.ListMemory()
+		files, err := t.memoryLister.ListMemory()
 		if err != nil {
-			t.send(chatID, "Error: "+escapeMarkdown(err.Error()))
+			t.send(ctx, chatID, "Error: "+bot.EscapeMarkdown(err.Error()))
 			return
 		}
 		if len(files) == 0 {
-			t.send(chatID, "Memory is empty — no files yet\\.")
+			t.send(ctx, chatID, "Memory is empty — no files yet\\.")
 			return
 		}
 		var sb strings.Builder
 		sb.WriteString("📂 *Memory files:*\n\n")
 		for _, f := range files {
-			fmt.Fprintf(&sb, "`%s` \\(%d bytes\\)\n", escapeMarkdown(f.Name), f.Size)
+			fmt.Fprintf(&sb, "`%s` \\(%d bytes\\)\n", bot.EscapeMarkdown(f.Name), f.Size)
 		}
-		t.send(chatID, sb.String())
+		t.send(ctx, chatID, sb.String())
 
 	default:
-		t.send(chatID, "Unknown command\\. Try /help")
+		t.send(ctx, chatID, "Unknown command\\. Try /help")
 	}
 }

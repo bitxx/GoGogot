@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"gogogot/store/skills"
 	"gogogot/store"
 	"gogogot/tools"
 
@@ -88,7 +87,7 @@ func SkillTools() []tools.Tool {
 }
 
 func skillList(_ context.Context, _ map[string]any) tools.Result {
-	loaded, err := skills.LoadAll(store.SkillsDir())
+	loaded, err := store.LoadSkills(store.SkillsDir())
 	if err != nil {
 		return tools.Result{Output: "error listing skills: " + err.Error(), IsErr: true}
 	}
@@ -107,7 +106,7 @@ func skillRead(_ context.Context, input map[string]any) tools.Result {
 	if err != nil {
 		return tools.ErrResult(err)
 	}
-	content, err := skills.ReadSkill(store.SkillsDir(), name)
+	content, err := store.ReadSkill(store.SkillsDir(), name)
 	if err != nil {
 		return tools.Result{Output: err.Error(), IsErr: true}
 	}
@@ -128,7 +127,7 @@ func skillCreate(_ context.Context, input map[string]any) tools.Result {
 		return tools.ErrResult(err)
 	}
 
-	path, err := skills.CreateSkill(store.SkillsDir(), name, desc, body)
+	path, err := store.CreateSkill(store.SkillsDir(), name, desc, body)
 	if err != nil {
 		log.Error().Err(err).Str("name", name).Msg("skill_create failed")
 		return tools.Result{Output: "error creating skill: " + err.Error(), IsErr: true}
@@ -147,7 +146,7 @@ func skillUpdate(_ context.Context, input map[string]any) tools.Result {
 		return tools.ErrResult(err)
 	}
 
-	if err := skills.UpdateSkill(store.SkillsDir(), name, content); err != nil {
+	if err := store.UpdateSkill(store.SkillsDir(), name, content); err != nil {
 		return tools.Result{Output: "error updating skill: " + err.Error(), IsErr: true}
 	}
 	log.Info().Str("name", name).Msg("skill_update")
@@ -159,7 +158,7 @@ func skillDelete(_ context.Context, input map[string]any) tools.Result {
 	if err != nil {
 		return tools.ErrResult(err)
 	}
-	if err := skills.DeleteSkill(store.SkillsDir(), name); err != nil {
+	if err := store.DeleteSkill(store.SkillsDir(), name); err != nil {
 		return tools.Result{Output: "error deleting skill: " + err.Error(), IsErr: true}
 	}
 	log.Info().Str("name", name).Msg("skill_delete")

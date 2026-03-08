@@ -1,4 +1,4 @@
-package skills
+package store
 
 import (
 	"fmt"
@@ -10,13 +10,13 @@ import (
 type Skill struct {
 	Name        string
 	Description string
-	FilePath    string // absolute path to SKILL.md
-	Dir         string // skill directory (for scripts/, references/)
+	FilePath    string
+	Dir         string
 }
 
-// LoadAll discovers skills from the given root directory.
+// LoadSkills discovers skills from the given root directory.
 // Each immediate subdirectory containing a SKILL.md is treated as a skill.
-func LoadAll(rootDir string) ([]Skill, error) {
+func LoadSkills(rootDir string) ([]Skill, error) {
 	entries, err := os.ReadDir(rootDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -25,7 +25,7 @@ func LoadAll(rootDir string) ([]Skill, error) {
 		return nil, err
 	}
 
-	var skills []Skill
+	var out []Skill
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -35,24 +35,22 @@ func LoadAll(rootDir string) ([]Skill, error) {
 		if err != nil {
 			continue
 		}
-		name, desc := parseFrontmatter(string(data))
+		name, desc := parseSkillFrontmatter(string(data))
 		if name == "" {
 			name = e.Name()
 		}
-		skills = append(skills, Skill{
+		out = append(out, Skill{
 			Name:        name,
 			Description: desc,
 			FilePath:    skillMd,
 			Dir:         filepath.Join(rootDir, e.Name()),
 		})
 	}
-	return skills, nil
+	return out, nil
 }
 
-// FormatForPrompt builds an <available_skills> XML block for system prompt injection.
-// Only name, description, and file path are included — the model reads
-// the full SKILL.md via the read tool when it decides to activate a skill.
-func FormatForPrompt(skills []Skill) string {
+// FormatSkillsForPrompt builds an <available_skills> XML block for system prompt injection.
+func FormatSkillsForPrompt(skills []Skill) string {
 	if len(skills) == 0 {
 		return ""
 	}
@@ -68,46 +66,8 @@ func FormatForPrompt(skills []Skill) string {
 	return b.String()
 }
 
-// parseFrontmatter extracts name and description from YAML frontmatter.
-// Expects the standard `---` delimited block at the top of the file.
-func parseFrontmatter(content string) (name, description string) {
-	if !strings.HasPrefix(content, "---") {
-		return "", ""
-	}
-	end := strings.Index(content[3:], "---")
-	if end < 0 {
-		return "", ""
-	}
-	block := content[3 : 3+end]
-
-	for _, line := range strings.Split(block, "\n") {
-		line = strings.TrimSpace(line)
-		if key, val, ok := splitYAMLLine(line); ok {
-			switch key {
-			case "name":
-				name = val
-			case "description":
-				description = val
-			}
-		}
-	}
-	return name, description
-}
-
-func splitYAMLLine(line string) (key, val string, ok bool) {
-	idx := strings.Index(line, ":")
-	if idx < 0 {
-		return "", "", false
-	}
-	key = strings.TrimSpace(line[:idx])
-	val = strings.TrimSpace(line[idx+1:])
-	val = strings.Trim(val, `"'`)
-	return key, val, true
-}
-
-// CreateSkill creates a new skill directory with a SKILL.md file.
 func CreateSkill(rootDir, name, description, body string) (string, error) {
-	safeName := sanitizeName(name)
+	safeName := sanitizeSkillName(name)
 	skillDir := filepath.Join(rootDir, safeName)
 
 	if _, err := os.Stat(skillDir); err == nil {
@@ -126,9 +86,8 @@ func CreateSkill(rootDir, name, description, body string) (string, error) {
 	return skillMd, nil
 }
 
-// UpdateSkill overwrites the SKILL.md of an existing skill.
 func UpdateSkill(rootDir, name, content string) error {
-	safeName := sanitizeName(name)
+	safeName := sanitizeSkillName(name)
 	skillMd := filepath.Join(rootDir, safeName, "SKILL.md")
 
 	if _, err := os.Stat(skillMd); os.IsNotExist(err) {
@@ -137,9 +96,8 @@ func UpdateSkill(rootDir, name, content string) error {
 	return os.WriteFile(skillMd, []byte(content), 0o644)
 }
 
-// DeleteSkill removes a skill directory entirely.
 func DeleteSkill(rootDir, name string) error {
-	safeName := sanitizeName(name)
+	safeName := sanitizeSkillName(name)
 	skillDir := filepath.Join(rootDir, safeName)
 
 	if _, err := os.Stat(skillDir); os.IsNotExist(err) {
@@ -148,14 +106,48 @@ func DeleteSkill(rootDir, name string) error {
 	return os.RemoveAll(skillDir)
 }
 
-// ReadSkill returns the raw content of a skill's SKILL.md.
 func ReadSkill(rootDir, name string) (string, error) {
-	safeName := sanitizeName(name)
+	safeName := sanitizeSkillName(name)
 	data, err := os.ReadFile(filepath.Join(rootDir, safeName, "SKILL.md"))
 	if os.IsNotExist(err) {
 		return "", fmt.Errorf("skill %q not found", safeName)
 	}
 	return string(data), err
+}
+
+func parseSkillFrontmatter(content string) (name, description string) {
+	if !strings.HasPrefix(content, "---") {
+		return "", ""
+	}
+	end := strings.Index(content[3:], "---")
+	if end < 0 {
+		return "", ""
+	}
+	block := content[3 : 3+end]
+
+	for _, line := range strings.Split(block, "\n") {
+		line = strings.TrimSpace(line)
+		if key, val, ok := splitSkillYAMLLine(line); ok {
+			switch key {
+			case "name":
+				name = val
+			case "description":
+				description = val
+			}
+		}
+	}
+	return name, description
+}
+
+func splitSkillYAMLLine(line string) (key, val string, ok bool) {
+	idx := strings.Index(line, ":")
+	if idx < 0 {
+		return "", "", false
+	}
+	key = strings.TrimSpace(line[:idx])
+	val = strings.TrimSpace(line[idx+1:])
+	val = strings.Trim(val, `"'`)
+	return key, val, true
 }
 
 func formatSkillMd(name, description, body string) string {
@@ -173,7 +165,7 @@ func formatSkillMd(name, description, body string) string {
 	return b.String()
 }
 
-func sanitizeName(name string) string {
+func sanitizeSkillName(name string) string {
 	name = strings.ToLower(name)
 	name = strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {

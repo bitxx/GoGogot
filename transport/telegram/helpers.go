@@ -1,98 +1,82 @@
 package telegram
 
 import (
-	"fmt"
-	"strings"
+	"context"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
 )
 
-func (t *Transport) send(chatID int64, markdownText string) {
-	msg := tgbotapi.NewMessage(chatID, markdownText)
-	msg.ParseMode = tgbotapi.ModeMarkdownV2
-	if _, err := t.api.Send(msg); err != nil {
+func (t *Transport) send(ctx context.Context, chatID int64, markdownText string) {
+	_, err := t.b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:    chatID,
+		Text:      markdownText,
+		ParseMode: models.ParseModeMarkdown,
+	})
+	if err != nil {
 		log.Error().Err(err).Msg("telegram send failed")
 	}
 }
 
-func (t *Transport) sendAndGetID(chatID int64, markdownText string) int {
-	msg := tgbotapi.NewMessage(chatID, markdownText)
-	msg.ParseMode = tgbotapi.ModeMarkdownV2
-	sent, err := t.api.Send(msg)
+func (t *Transport) sendAndGetID(ctx context.Context, chatID int64, markdownText string) int {
+	sent, err := t.b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:    chatID,
+		Text:      markdownText,
+		ParseMode: models.ParseModeMarkdown,
+	})
 	if err != nil {
 		log.Error().Err(err).Msg("telegram send failed")
 		return 0
 	}
-	return sent.MessageID
+	return sent.ID
 }
 
-func (t *Transport) sendLong(chatID int64, text string) {
+func (t *Transport) sendLong(ctx context.Context, chatID int64, text string) {
 	for _, chunk := range FormatHTMLChunks(text, maxMessageLen) {
-		msg := tgbotapi.NewMessage(chatID, chunk.HTML)
-		msg.ParseMode = tgbotapi.ModeHTML
-		if _, err := t.api.Send(msg); err != nil {
+		sent, err := t.b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID:    chatID,
+			Text:      chunk.HTML,
+			ParseMode: models.ParseModeHTML,
+		})
+		_ = sent
+		if err != nil {
 			log.Warn().Err(err).Msg("telegram HTML send failed, falling back to plain text")
-			msg.Text = chunk.Text
-			msg.ParseMode = ""
-			if _, err := t.api.Send(msg); err != nil {
+			_, err = t.b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   chunk.Text,
+			})
+			if err != nil {
 				log.Error().Err(err).Msg("telegram plain text send failed")
 			}
 		}
 	}
 }
 
-func (t *Transport) editMessage(chatID int64, messageID int, markdownText string) {
+func (t *Transport) editMessage(ctx context.Context, chatID int64, messageID int, markdownText string) {
 	if messageID == 0 {
 		return
 	}
-	edit := tgbotapi.NewEditMessageText(chatID, messageID, markdownText)
-	edit.ParseMode = tgbotapi.ModeMarkdownV2
-	if _, err := t.api.Send(edit); err != nil {
+	_, err := t.b.EditMessageText(ctx, &bot.EditMessageTextParams{
+		ChatID:    chatID,
+		MessageID: messageID,
+		Text:      markdownText,
+		ParseMode: models.ParseModeMarkdown,
+	})
+	if err != nil {
 		log.Debug().Err(err).Msg("telegram edit failed")
 	}
 }
 
-func (t *Transport) deleteMessage(chatID int64, messageID int) {
+func (t *Transport) deleteMessage(ctx context.Context, chatID int64, messageID int) {
 	if messageID == 0 {
 		return
 	}
-	del := tgbotapi.NewDeleteMessage(chatID, messageID)
-	if _, err := t.api.Request(del); err != nil {
+	_, err := t.b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+		ChatID:    chatID,
+		MessageID: messageID,
+	})
+	if err != nil {
 		log.Debug().Err(err).Msg("telegram delete failed")
 	}
-}
-
-// SendMessage sends a one-shot message to a Telegram chat (used by --task mode).
-func SendMessage(token string, chatID int64, text string) error {
-	api, err := tgbotapi.NewBotAPI(token)
-	if err != nil {
-		return fmt.Errorf("telegram init: %w", err)
-	}
-	for _, chunk := range FormatHTMLChunks(text, maxMessageLen) {
-		msg := tgbotapi.NewMessage(chatID, chunk.HTML)
-		msg.ParseMode = tgbotapi.ModeHTML
-		if _, err := api.Send(msg); err != nil {
-			msg.Text = chunk.Text
-			msg.ParseMode = ""
-			if _, err := api.Send(msg); err != nil {
-				return fmt.Errorf("telegram send: %w", err)
-			}
-		}
-	}
-	return nil
-}
-
-
-const maxMessageLen = 4000
-
-func escapeMarkdown(s string) string {
-	replacer := strings.NewReplacer(
-		"_", "\\_", "*", "\\*", "[", "\\[", "]", "\\]",
-		"(", "\\(", ")", "\\)", "~", "\\~", "`", "\\`",
-		">", "\\>", "#", "\\#", "+", "\\+", "-", "\\-",
-		"=", "\\=", "|", "\\|", "{", "\\{", "}", "\\}",
-		".", "\\.", "!", "\\!",
-	)
-	return replacer.Replace(s)
 }

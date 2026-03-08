@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"gogogot/store/skills"
 	"gogogot/store"
 )
 
@@ -108,13 +107,13 @@ Always update memory after making changes to the system.`
 }
 
 func buildSkillsSection() string {
-	loaded, err := skills.LoadAll(store.SkillsDir())
+	loaded, err := store.LoadSkills(store.SkillsDir())
 
 	var skillsIntro string
 	if err != nil || len(loaded) == 0 {
 		skillsIntro = "SKILLS: You have a skill system for reusable procedural knowledge.\nNo skills are currently available."
 	} else {
-		block := skills.FormatForPrompt(loaded)
+		block := store.FormatSkillsForPrompt(loaded)
 		skillsIntro = fmt.Sprintf(`SKILLS: You have a skill system for reusable procedural knowledge.
 Before replying, scan <available_skills> descriptions below.
 - If exactly one skill clearly applies: read its SKILL.md with skill_read, then follow the instructions.

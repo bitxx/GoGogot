@@ -1,6 +1,6 @@
 services:
   gogogot:
-    image: octagonlab/gogogot:latest
+    image: octagonlab/gogogot:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
