@@ -9,7 +9,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
       TZ: ${TZ:-UTC}
     volumes:
       - ./data:/data

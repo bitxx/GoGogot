@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"net/url"
+	"path/filepath"
 	"time"
 
 	"gogogot/event"
@@ -95,14 +97,17 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []types.ContentB
 }
 
 func (a *Agent) executeSingleTool(ctx context.Context, tc types.ContentBlock, counter *int) types.ContentBlock {
-	a.emit(event.ToolStart, map[string]any{"name": tc.ToolName})
-
 	var input map[string]any
 	if len(tc.ToolInput) > 0 {
 		if err := json.Unmarshal(tc.ToolInput, &input); err != nil {
 			log.Error().Err(err).Msg("failed to unmarshal tool input")
 		}
 	}
+
+	a.emit(event.ToolStart, map[string]any{
+		"name":   tc.ToolName,
+		"detail": extractToolDetail(tc.ToolName, input),
+	})
 
 	callCtx := &ToolCallContext{
 		ToolName:  tc.ToolName,
@@ -151,4 +156,30 @@ func (a *Agent) runAfterHooks(ctx context.Context, callCtx *ToolCallContext, res
 	for _, hook := range a.afterHooks {
 		hook(ctx, callCtx, result)
 	}
+}
+
+const maxDetailLen = 60
+
+func extractToolDetail(name string, input map[string]any) string {
+	var detail string
+	switch name {
+	case "bash":
+		detail, _ = input["command"].(string)
+	case "edit_file", "read_file", "write_file":
+		if p, ok := input["path"].(string); ok {
+			detail = filepath.Base(p)
+		}
+	case "web_search":
+		detail, _ = input["query"].(string)
+	case "web_fetch":
+		if raw, ok := input["url"].(string); ok {
+			if u, err := url.Parse(raw); err == nil {
+				detail = u.Host
+			}
+		}
+	}
+	if len(detail) > maxDetailLen {
+		detail = detail[:maxDetailLen] + "..."
+	}
+	return detail
 }

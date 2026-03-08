@@ -154,17 +154,41 @@ func (t *Transport) SendTyping(_ context.Context, channelID string) error {
 
 // --- transport.StatusUpdater ---
 
-func (t *Transport) SendStatus(_ context.Context, channelID, text string) (string, error) {
+var phaseEmoji = map[transport.Phase]string{
+	transport.PhaseThinking: "\U0001f9e0",
+	transport.PhasePlanning: "\U0001f4cb",
+	transport.PhaseTool:     "\U0001f527",
+}
+
+func formatStatus(s transport.AgentStatus) string {
+	emoji := phaseEmoji[s.Phase]
+	if emoji == "" {
+		emoji = "\u23f3"
+	}
+	label := s.Detail
+	if label == "" {
+		switch s.Phase {
+		case transport.PhaseThinking:
+			label = "Thinking"
+		case transport.PhasePlanning:
+			label = "Planning"
+		default:
+			label = s.Tool
+		}
+	}
+	return emoji + " " + escapeMarkdown(label) + "\\.\\.\\."
+}
+
+func (t *Transport) SendStatus(_ context.Context, channelID string, status transport.AgentStatus) (string, error) {
 	chatID, err := t.parseChatID(channelID)
 	if err != nil {
 		return "", err
 	}
-	escaped := escapeMarkdown(text)
-	msgID := t.sendAndGetID(chatID, escaped)
+	msgID := t.sendAndGetID(chatID, formatStatus(status))
 	return strconv.Itoa(msgID), nil
 }
 
-func (t *Transport) UpdateStatus(_ context.Context, channelID, statusID, text string) error {
+func (t *Transport) UpdateStatus(_ context.Context, channelID, statusID string, status transport.AgentStatus) error {
 	chatID, err := t.parseChatID(channelID)
 	if err != nil {
 		return err
@@ -173,7 +197,7 @@ func (t *Transport) UpdateStatus(_ context.Context, channelID, statusID, text st
 	if err != nil {
 		return fmt.Errorf("invalid status ID: %w", err)
 	}
-	t.editMessage(chatID, msgID, escapeMarkdown(text))
+	t.editMessage(chatID, msgID, formatStatus(status))
 	return nil
 }
 

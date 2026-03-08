@@ -119,7 +119,7 @@ func (b *Bridge) runAgent(ctx context.Context, channelID string, msg transport.M
 
 	var statusID string
 	if su, ok := b.transport.(transport.StatusUpdater); ok {
-		statusID, _ = su.SendStatus(ctx, channelID, "Working on it...")
+		statusID, _ = su.SendStatus(ctx, channelID, transport.AgentStatus{Phase: transport.PhaseThinking})
 	}
 
 	agentCtx = transport.WithTransport(agentCtx, b.transport, channelID)
@@ -230,23 +230,82 @@ func buildScheduledPrompt(taskID, command, skill string) string {
 	return b.String()
 }
 
+var toolLabel = map[string]string{
+	"bash":            "Running command",
+	"edit_file":       "Editing file",
+	"read_file":       "Reading file",
+	"write_file":      "Writing file",
+	"list_files":      "Listing files",
+	"web_search":      "Searching the web",
+	"web_fetch":       "Reading webpage",
+	"web_request":     "Making request",
+	"web_download":    "Downloading",
+	"send_file":       "Sending file",
+	"task_plan":       "Planning",
+	"memory_read":     "Checking memory",
+	"memory_write":    "Saving to memory",
+	"memory_list":     "Listing memories",
+	"schedule_add":    "Scheduling task",
+	"schedule_list":   "Listing schedule",
+	"schedule_remove": "Removing schedule",
+	"soul_read":       "Reading identity",
+	"soul_write":      "Updating identity",
+	"user_read":       "Reading user profile",
+	"user_write":      "Updating user profile",
+	"system_info":     "Checking system",
+	"skill_read":      "Reading skill",
+	"skill_list":      "Listing skills",
+	"skill_create":    "Creating skill",
+	"skill_update":    "Updating skill",
+	"skill_delete":    "Deleting skill",
+}
+
+func buildToolStatus(data map[string]any) transport.AgentStatus {
+	name, _ := data["name"].(string)
+	detail, _ := data["detail"].(string)
+
+	label := toolLabel[name]
+	if label == "" {
+		label = name
+	}
+	if detail != "" {
+		label = label + ": " + detail
+	}
+
+	phase := transport.PhaseTool
+	if name == "task_plan" {
+		phase = transport.PhasePlanning
+	}
+
+	return transport.AgentStatus{Phase: phase, Tool: name, Detail: label}
+}
+
 func (b *Bridge) consumeEvents(ctx context.Context, channelID string, events <-chan event.Event, statusID string) {
 	var finalText string
 	var toolsUsed []string
 
 	for ev := range events {
 		switch ev.Kind {
+		case event.LLMStart:
+			if su, ok := b.transport.(transport.StatusUpdater); ok && statusID != "" {
+				_ = su.UpdateStatus(ctx, channelID, statusID, transport.AgentStatus{Phase: transport.PhaseThinking})
+			}
+			if tn, ok := b.transport.(transport.TypingNotifier); ok {
+				_ = tn.SendTyping(ctx, channelID)
+			}
+
 		case event.LLMStream:
 			text, _ := ev.Data.(map[string]any)["text"].(string)
 			finalText = text
 
 		case event.ToolStart:
-			name, _ := ev.Data.(map[string]any)["name"].(string)
+			data, _ := ev.Data.(map[string]any)
+			name, _ := data["name"].(string)
 			toolsUsed = append(toolsUsed, name)
 			log.Debug().Str("name", name).Str("channel", channelID).Msg("bridge: tool running")
 
 			if su, ok := b.transport.(transport.StatusUpdater); ok && statusID != "" {
-				_ = su.UpdateStatus(ctx, channelID, statusID, fmt.Sprintf("Running %s...", name))
+				_ = su.UpdateStatus(ctx, channelID, statusID, buildToolStatus(data))
 			}
 			if tn, ok := b.transport.(transport.TypingNotifier); ok {
 				_ = tn.SendTyping(ctx, channelID)
@@ -262,10 +321,9 @@ func (b *Bridge) consumeEvents(ctx context.Context, channelID string, events <-c
 				errText, _ = errMap["error"].(string)
 			}
 			if su, ok := b.transport.(transport.StatusUpdater); ok && statusID != "" {
-				_ = su.UpdateStatus(ctx, channelID, statusID, "Error: "+errText)
-			} else {
-				_ = b.transport.SendText(ctx, channelID, "Error: "+errText)
+				_ = su.DeleteStatus(ctx, channelID, statusID)
 			}
+			_ = b.transport.SendText(ctx, channelID, "Error: "+errText)
 			return
 
 		case event.Done:

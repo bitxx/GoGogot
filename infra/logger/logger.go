@@ -14,23 +14,6 @@ func Init(logLevel string) {
 	console := zerolog.ConsoleWriter{
 		Out:        os.Stderr,
 		TimeFormat: "15:04:05",
-		FormatLevel: func(i interface{}) string {
-			lvl := strings.ToUpper(fmt.Sprint(i))
-			switch lvl {
-			case "DEBUG":
-				return "\033[1;34mDBG\033[0m"
-			case "INFO":
-				return "\033[1;36mINF\033[0m"
-			case "WARN":
-				return "\033[1;33mWRN\033[0m"
-			case "ERROR":
-				return "\033[1;31mERR\033[0m"
-			case "FATAL":
-				return "\033[1;35mFTL\033[0m"
-			default:
-				return lvl
-			}
-		},
 		FormatMessage: func(i interface{}) string {
 			return fmt.Sprintf("\033[1mgogogot\033[0m %s", i)
 		},

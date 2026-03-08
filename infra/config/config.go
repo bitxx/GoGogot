@@ -18,6 +18,13 @@ type Config struct {
 	MaxTokens       int
 }
 
+func envDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
 func Load() (*Config, error) {
 	transport := os.Getenv("GOGOGOT_TRANSPORT")
 	if transport == "" {
@@ -29,7 +36,7 @@ func Load() (*Config, error) {
 		TelegramToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
 		BraveAPIKey:   os.Getenv("BRAVE_API_KEY"),
 		DataDir:       os.Getenv("GOGOGOT_DATA_DIR"),
-		LogLevel:      os.Getenv("LOG_LEVEL"),
+		LogLevel:      envDefault("LOG_LEVEL", "debug"),
 		Model:         os.Getenv("GOGOGOT_MODEL"),
 		MaxTokens:     4096,
 	}

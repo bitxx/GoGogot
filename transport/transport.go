@@ -51,9 +51,26 @@ type TypingNotifier interface {
 	SendTyping(ctx context.Context, channelID string) error
 }
 
+// Phase represents a high-level stage of the agent's work.
+type Phase string
+
+const (
+	PhaseThinking Phase = "thinking"
+	PhasePlanning Phase = "planning"
+	PhaseTool     Phase = "tool"
+)
+
+// AgentStatus carries structured information about what the agent is doing.
+// Each transport renders it in its own style (emoji, spinner, animation, etc.).
+type AgentStatus struct {
+	Phase  Phase
+	Tool   string // raw tool name (empty when not in tool phase)
+	Detail string // human-readable label: "Editing file", "go build", etc.
+}
+
 // StatusUpdater is implemented by transports that can post/edit/delete status messages.
 type StatusUpdater interface {
-	SendStatus(ctx context.Context, channelID, text string) (statusID string, err error)
-	UpdateStatus(ctx context.Context, channelID, statusID, text string) error
+	SendStatus(ctx context.Context, channelID string, status AgentStatus) (statusID string, err error)
+	UpdateStatus(ctx context.Context, channelID, statusID string, status AgentStatus) error
 	DeleteStatus(ctx context.Context, channelID, statusID string) error
 }
