@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"gogogot/llm/types"
@@ -35,13 +36,18 @@ func (a *Adapter) Call(
 	tools []types.ToolDef,
 	maxTokens int,
 ) (*types.Response, error) {
-	oaiMsgs := messagesToOpenAI(a.supportsVision, systemPrompt, messages)
+	reasoning := isReasoningModel(model)
+	oaiMsgs := messagesToOpenAI(a.supportsVision, reasoning, systemPrompt, messages)
 	oaiTools := toolDefsToOpenAI(tools)
 
 	params := openai.ChatCompletionNewParams{
-		Model:     shared.ChatModel(model),
-		Messages:  oaiMsgs,
-		MaxTokens: openai.Int(int64(maxTokens)),
+		Model:    shared.ChatModel(model),
+		Messages: oaiMsgs,
+	}
+	if reasoning {
+		params.MaxCompletionTokens = openai.Int(int64(maxTokens))
+	} else {
+		params.MaxTokens = openai.Int(int64(maxTokens))
 	}
 	if len(oaiTools) > 0 {
 		params.Tools = oaiTools
@@ -70,11 +76,24 @@ func (a *Adapter) Call(
 	return openaiToResponse(resp), nil
 }
 
-func messagesToOpenAI(supportsVision bool, system string, msgs []types.Message) []openai.ChatCompletionMessageParamUnion {
+func isReasoningModel(model string) bool {
+	for _, prefix := range []string{"o1", "o3", "o4"} {
+		if model == prefix || strings.HasPrefix(model, prefix+"-") {
+			return true
+		}
+	}
+	return false
+}
+
+func messagesToOpenAI(supportsVision, reasoning bool, system string, msgs []types.Message) []openai.ChatCompletionMessageParamUnion {
 	var out []openai.ChatCompletionMessageParamUnion
 
 	if system != "" {
-		out = append(out, openai.SystemMessage(system))
+		if reasoning {
+			out = append(out, openai.DeveloperMessage(system))
+		} else {
+			out = append(out, openai.SystemMessage(system))
+		}
 	}
 
 	for _, msg := range msgs {

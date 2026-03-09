@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"gogogot/llm/openrouter"
+	"gogogot/llm/catalog"
 )
 
 type Provider struct {
@@ -25,97 +25,109 @@ type Provider struct {
 var aliases = map[string]string{
 	"claude":   "claude-sonnet-4-6",
 	"deepseek": "deepseek/deepseek-v3.2",
-	"gemini":   "google/gemini-3-pro-preview",
+	"gemini":   "google/gemini-3-flash-preview",
 	"minimax":  "minimax/minimax-m2.5",
 	"qwen":     "qwen/qwen3.5-397b-a17b",
 	"llama":    "meta-llama/llama-4-maverick",
 	"kimi":     "moonshotai/kimi-k2.5",
-}
-
-
-type anthropicDef struct {
-	Label         string
-	ContextWindow int
-	Vision        bool
-	InputPerM     float64
-	OutputPerM    float64
-}
-
-var anthropicModels = map[string]anthropicDef{
-	"claude-sonnet-4-6": {
-		Label: "Claude Sonnet 4.6", ContextWindow: 1_000_000,
-		Vision: true, InputPerM: 3.0, OutputPerM: 15.0,
-	},
+	"openai":   "openai/gpt-5-nano",
 }
 
 var anthropicToOpenRouter = map[string]string{
+	"claude-opus-4-6":   "anthropic/claude-opus-4.6",
 	"claude-sonnet-4-6": "anthropic/claude-sonnet-4.6",
+	"claude-opus-4-5":   "anthropic/claude-opus-4.5",
+	"claude-sonnet-4-5": "anthropic/claude-sonnet-4.5",
+	"claude-haiku-4-5":  "anthropic/claude-haiku-4.5",
+	"claude-sonnet-4":   "anthropic/claude-sonnet-4",
+	"claude-haiku-3-5":  "anthropic/claude-haiku-3.5",
 }
 
 var (
-	catalogOnce sync.Once
-	catalogData map[string]openrouter.ModelInfo
+	anthropicOnce    sync.Once
+	anthropicCatalog map[string]catalog.ModelDef
+
+	openaiOnce    sync.Once
+	openaiCatalog map[string]catalog.ModelDef
+
+	openrouterOnce    sync.Once
+	openrouterCatalog map[string]catalog.ModelDef
 )
 
-func getCatalog() map[string]openrouter.ModelInfo {
-	catalogOnce.Do(func() {
-		catalogData = openrouter.LoadCatalog()
-	})
-	return catalogData
+func getAnthropicCatalog() map[string]catalog.ModelDef {
+	anthropicOnce.Do(func() { anthropicCatalog = catalog.Anthropic() })
+	return anthropicCatalog
 }
 
-// ResolveProvider builds a Provider from a model ID.
-// Accepts a short alias ("deepseek"), a full OpenRouter slug ("deepseek/deepseek-v3.2"),
-// and a provider ("anthropic" or "openrouter").
+func getOpenAICatalog() map[string]catalog.ModelDef {
+	openaiOnce.Do(func() { openaiCatalog = catalog.OpenAI() })
+	return openaiCatalog
+}
+
+func getOpenRouterCatalog() map[string]catalog.ModelDef {
+	openrouterOnce.Do(func() { openrouterCatalog = catalog.OpenRouter() })
+	return openrouterCatalog
+}
+
+// ResolveProvider builds a Provider from an exact model ID and provider name.
 func ResolveProvider(modelID, provider string) (*Provider, error) {
-	slug := modelID
 	if resolved, ok := aliases[modelID]; ok {
-		slug = resolved
+		modelID = resolved
 	}
 
 	switch provider {
 	case "anthropic":
-		if strings.Contains(slug, "/") {
-			return nil, fmt.Errorf("model %q is an OpenRouter slug — use GOGOGOT_PROVIDER=openrouter or the 'claude' alias", modelID)
+		if strings.Contains(modelID, "/") {
+			return nil, fmt.Errorf("model %q is an OpenRouter slug — use GOGOGOT_PROVIDER=openrouter", modelID)
 		}
-		if _, ok := anthropicModels[slug]; !ok {
-			return nil, fmt.Errorf("unknown Anthropic model %q — available: claude", modelID)
+		if _, ok := getAnthropicCatalog()[modelID]; !ok {
+			return nil, fmt.Errorf("unknown Anthropic model %q — available: %s", modelID, catalogKeys(getAnthropicCatalog()))
 		}
-		return resolveAnthropic(modelID, slug)
+		return resolveAnthropic(modelID)
+
+	case "openai":
+		if strings.Contains(modelID, "/") {
+			return nil, fmt.Errorf("model %q is an OpenRouter slug — use GOGOGOT_PROVIDER=openrouter", modelID)
+		}
+		if _, ok := getOpenAICatalog()[modelID]; !ok {
+			return nil, fmt.Errorf("unknown OpenAI model %q — available: %s", modelID, catalogKeys(getOpenAICatalog()))
+		}
+		return resolveOpenAI(modelID)
 
 	case "openrouter":
-		if _, ok := anthropicModels[slug]; ok {
-			if orSlug, ok := anthropicToOpenRouter[slug]; ok {
+		if _, ok := getAnthropicCatalog()[modelID]; ok {
+			if orSlug, ok := anthropicToOpenRouter[modelID]; ok {
 				return resolveOpenRouter(modelID, orSlug)
 			}
 			return nil, fmt.Errorf("model %q has no OpenRouter equivalent", modelID)
 		}
-		if !strings.Contains(slug, "/") {
-			return nil, fmt.Errorf("unknown model %q — use an alias (%s) or a full OpenRouter slug (vendor/model)",
-				modelID, strings.Join(aliasKeys(), ", "))
+		if _, ok := getOpenAICatalog()[modelID]; ok {
+			return resolveOpenRouter(modelID, "openai/"+modelID)
 		}
-		return resolveOpenRouter(modelID, slug)
+		if !strings.Contains(modelID, "/") {
+			return nil, fmt.Errorf("unknown model %q — use a full OpenRouter slug (vendor/model)", modelID)
+		}
+		return resolveOpenRouter(modelID, modelID)
 
 	default:
-		return nil, fmt.Errorf("unknown provider %q — use 'anthropic' or 'openrouter'", provider)
+		return nil, fmt.Errorf("unknown provider %q — use 'anthropic', 'openai', or 'openrouter'", provider)
 	}
 }
 
-
-func resolveAnthropic(id, slug string) (*Provider, error) {
+func resolveAnthropic(model string) (*Provider, error) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
-		return nil, fmt.Errorf("ANTHROPIC_API_KEY not set for model %q", id)
+		return nil, fmt.Errorf("ANTHROPIC_API_KEY not set for model %q", model)
 	}
+	return providerFromDef(getAnthropicCatalog()[model], model, apiKey, "", "anthropic"), nil
+}
 
-	def := anthropicModels[slug]
-	p := &Provider{
-		ID: id, Label: def.Label, Model: slug,
-		APIKey: apiKey, Format: "anthropic",
-		ContextWindow: def.ContextWindow, SupportsVision: def.Vision,
-		InputPricePerM: def.InputPerM, OutputPricePerM: def.OutputPerM,
+func resolveOpenAI(model string) (*Provider, error) {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("OPENAI_API_KEY not set for model %q", model)
 	}
-	return p, nil
+	return providerFromDef(getOpenAICatalog()[model], model, apiKey, "https://api.openai.com/v1", "openai"), nil
 }
 
 func resolveOpenRouter(id, slug string) (*Provider, error) {
@@ -130,21 +142,30 @@ func resolveOpenRouter(id, slug string) (*Provider, error) {
 		APIKey:  apiKey, Format: "openai",
 	}
 
-	if entry, ok := getCatalog()[slug]; ok {
-		p.Label = entry.Name
-		p.ContextWindow = entry.ContextLength
-		p.SupportsVision = entry.Vision
-		p.InputPricePerM = entry.InputPricePerM
-		p.OutputPricePerM = entry.OutputPricePerM
+	if def, ok := getOpenRouterCatalog()[slug]; ok {
+		p.Label = def.Label
+		p.ContextWindow = def.ContextWindow
+		p.SupportsVision = def.Vision
+		p.InputPricePerM = def.InputPricePerM
+		p.OutputPricePerM = def.OutputPricePerM
 	}
 
 	return p, nil
 }
 
-func aliasKeys() []string {
-	keys := make([]string, 0, len(aliases))
-	for k := range aliases {
+func providerFromDef(def catalog.ModelDef, model, apiKey, baseURL, format string) *Provider {
+	return &Provider{
+		ID: model, Label: def.Label, Model: model,
+		BaseURL: baseURL, APIKey: apiKey, Format: format,
+		ContextWindow: def.ContextWindow, SupportsVision: def.Vision,
+		InputPricePerM: def.InputPricePerM, OutputPricePerM: def.OutputPricePerM,
+	}
+}
+
+func catalogKeys(m map[string]catalog.ModelDef) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
 		keys = append(keys, k)
 	}
-	return keys
+	return strings.Join(keys, ", ")
 }

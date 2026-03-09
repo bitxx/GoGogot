@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"gogogot/core/agent"
 	"gogogot/core/agent/prompt"
@@ -24,8 +25,8 @@ import (
 )
 
 func main() {
-	modelFlag := flag.String("model", "", "model alias or OpenRouter slug (required if GOGOGOT_MODEL not set)")
-	providerFlag := flag.String("provider", "", "LLM provider: anthropic or openrouter (required if GOGOGOT_PROVIDER not set)")
+	modelFlag := flag.String("model", "", "model ID or OpenRouter slug (required if GOGOGOT_MODEL not set)")
+	providerFlag := flag.String("provider", "", "LLM provider: anthropic, openai, or openrouter (required if GOGOGOT_PROVIDER not set)")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -44,16 +45,16 @@ func main() {
 
 	store.Init(cfg.DataDir)
 
-	provider, err := selectProvider(cfg)
+	t, err := buildTransport(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 
-	t, err := buildTransport(cfg)
+	provider, err := selectProvider(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		notifyOwnerAndBlock(t, err)
+		return
 	}
 
 	ownerChannelID := fmt.Sprintf("tg_%d", t.OwnerID())
@@ -97,12 +98,27 @@ func main() {
 	fmt.Println("Shutting down.")
 }
 
+func notifyOwnerAndBlock(t *telegram.Transport, providerErr error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	channelID := fmt.Sprintf("tg_%d", t.OwnerID())
+	msg := fmt.Sprintf("⚠️ Failed to start:\n\n%v\n\nFix environment variables and restart the container.", providerErr)
+	_ = t.SendText(ctx, channelID, msg)
+
+	fmt.Fprintf(os.Stderr, "error: %v\nBlocking to prevent restart loop. Fix env vars and restart manually.\n", providerErr)
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	<-sig
+}
+
 func selectProvider(cfg *config.Config) (*llm.Provider, error) {
 	if cfg.Provider == "" {
-		return nil, fmt.Errorf("GOGOGOT_PROVIDER is required — set to 'anthropic' or 'openrouter'")
+		return nil, fmt.Errorf("GOGOGOT_PROVIDER is required — set to 'anthropic', 'openai', or 'openrouter'")
 	}
 	if cfg.Model == "" {
-		return nil, fmt.Errorf("GOGOGOT_MODEL is required — use an alias (claude, deepseek, gemini, ...) or an OpenRouter slug")
+		return nil, fmt.Errorf("GOGOGOT_MODEL is required — use an exact model ID (e.g. claude-sonnet-4-6, gpt-4o) or an OpenRouter slug (vendor/model)")
 	}
 	return llm.ResolveProvider(cfg.Model, cfg.Provider)
 }

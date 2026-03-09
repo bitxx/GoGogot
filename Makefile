@@ -5,7 +5,7 @@ TAG   := latest
 .PHONY: run build clean lint generate docker-build docker-push docker-release deploy tag
 
 generate:
-	curl -sf https://openrouter.ai/api/v1/models -o llm/openrouter/openrouter_models.json
+	curl -sf https://openrouter.ai/api/v1/models -o llm/catalog/openrouter_models.json
 
 run:
 	go run ./cmd $(ARGS)

@@ -12,7 +12,7 @@ A **lightweight, extensible, and secure** open-source AI agent that lives on you
 
 - **Single binary, ~15 MB, ~10 MB RAM** — deploys with one `docker run` command
 - **Your keys stay on your server** — no cloud account, no telemetry, no phoning home
-- **You pick the model** — built-in aliases from budget to frontier, or pass any [OpenRouter](https://openrouter.ai) slug directly
+- **You pick the model** — Anthropic, OpenAI, or any [OpenRouter](https://openrouter.ai) model
 - **Extensible** — clean Go interfaces (`Backend`, `Transport`, `Tool`) make it trivial to add providers, transports, or custom tools
 
 ## Quick Start
@@ -31,9 +31,9 @@ docker run -d --restart unless-stopped \
   --name gogogot \
   -e TELEGRAM_BOT_TOKEN=... \
   -e TELEGRAM_OWNER_ID=... \
-  -e GOGOGOT_PROVIDER=openrouter \
-  -e OPENROUTER_API_KEY=... \
-  -e GOGOGOT_MODEL=deepseek \
+  -e GOGOGOT_PROVIDER=anthropic \
+  -e ANTHROPIC_API_KEY=... \
+  -e GOGOGOT_MODEL=claude-sonnet-4-6 \
   -v ./data:/data \
   -v ./work:/work \
   octagonlab/gogogot:latest
@@ -51,9 +51,9 @@ curl -O https://raw.githubusercontent.com/aspasskiy/GoGogot/main/deploy/docker-c
 cat > .env <<EOF
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_OWNER_ID=...
-GOGOGOT_PROVIDER=openrouter
-OPENROUTER_API_KEY=...
-GOGOGOT_MODEL=deepseek
+GOGOGOT_PROVIDER=anthropic
+ANTHROPIC_API_KEY=...
+GOGOGOT_MODEL=claude-sonnet-4-6
 EOF
 
 docker compose up -d
@@ -75,25 +75,34 @@ go run ./cmd
 
 ## Choosing a Model
 
-Set the model via `GOGOGOT_MODEL` env var or `--model` CLI flag.
+Set `GOGOGOT_PROVIDER`, `GOGOGOT_MODEL`, and the corresponding API key. The agent will not start without all three.
 
-> **Provider and model are required.** Set `GOGOGOT_PROVIDER` (`anthropic` or `openrouter`), `GOGOGOT_MODEL`, and the corresponding API key (`ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`). The agent will not start without all three.
+| Provider | `GOGOGOT_PROVIDER` | API key env | Example `GOGOGOT_MODEL` |
+|---|---|---|---|
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5` |
+| OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4o`, `gpt-4.1`, `gpt-5.4`, `o3`, `o4-mini` |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `deepseek/deepseek-v3.2`, `google/gemini-3-flash-preview` |
 
-Built-in aliases:
+Model metadata (context window, vision support, pricing) is stored in JSON catalogs under [`llm/catalog/`](llm/catalog/) — just edit the JSON to add or update models.
 
-| Alias | Model slug |
-|-------|-----------|
-| `claude` | `claude-sonnet-4-6` (Anthropic) / `anthropic/claude-sonnet-4.6` (OpenRouter) |
+With OpenRouter you can also pass any slug directly, e.g. `GOGOGOT_MODEL=moonshotai/kimi-k2.5`.
+
+### Short Aliases
+
+For convenience, short aliases are supported as `GOGOGOT_MODEL` values:
+
+| Alias | Resolves to |
+|---|---|
+| `claude` | `claude-sonnet-4-6` |
+| `openai` | `openai/gpt-5-nano` |
 | `deepseek` | `deepseek/deepseek-v3.2` |
 | `gemini` | `google/gemini-3-pro-preview` |
-| `minimax` | `minimax/minimax-m2.5` |
-| `qwen` | `qwen/qwen3.5-397b-a17b` |
 | `llama` | `meta-llama/llama-4-maverick` |
+| `qwen` | `qwen/qwen3.5-397b-a17b` |
+| `minimax` | `minimax/minimax-m2.5` |
 | `kimi` | `moonshotai/kimi-k2.5` |
 
-You can also pass any OpenRouter slug directly: `GOGOGOT_MODEL=openai/gpt-5.4`. All aliases are defined in [`llm/provider.go`](llm/provider.go).
-
-Browse all available models: [OpenRouter Models](https://openrouter.ai/models) | Independent benchmarks: [PinchBench](https://pinchbench.com/)
+Browse all available models: [Anthropic](https://docs.anthropic.com/en/docs/about-claude/models) | [OpenAI](https://platform.openai.com/docs/models) | [OpenRouter](https://openrouter.ai/models) | Benchmarks: [PinchBench](https://pinchbench.com/)
 
 ## Features
 
@@ -108,7 +117,7 @@ Browse all available models: [OpenRouter Models](https://openrouter.ai/models) |
 - **Task planning** — session-scoped checklist for multi-step work
 - **Scheduling** — cron-based self-scheduling, persisted across restarts
 - **Compaction** — automatic context compression near token limits
-- **Multi-model** — 7 aliases + any OpenRouter slug
+- **Multi-model** — Anthropic, OpenAI, or any OpenRouter model
 - **Observability** — structured events (LLM calls, tool runs, errors)
 
 ## Use Cases
@@ -155,7 +164,7 @@ GoGogot is designed to be extended without frameworks or plugin registries:
 
 - Adding a new LLM backend (implement one `Backend` interface method)
 - Adding a new transport like Discord or Slack (implement 3 `Transport` methods)
-- Adding custom models via OpenRouter slug or code aliases
+- Adding custom models by editing JSON catalogs in [`llm/catalog/`](llm/catalog/)
 
 ## License
 

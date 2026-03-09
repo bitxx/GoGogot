@@ -15,7 +15,7 @@ type Config struct {
 	DataDir         string
 	LogLevel        string
 	Model           string
-	Provider        string // "anthropic" or "openrouter" (required)
+	Provider        string // "anthropic", "openai", or "openrouter" (required)
 	MaxTokens       int
 }
 
