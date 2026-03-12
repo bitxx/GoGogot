@@ -1,20 +1,14 @@
-package store
+package tools
 
 import (
 	"context"
 	"fmt"
+	"gogogot/internal/tools/store"
 	"gogogot/internal/tools/types"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
-type MemoryFile struct {
-	Name string
-	Size int64
-}
-
-func (s *Store) MemoryTools() []types.Tool {
+func MemoryTools(st store.Store) []types.Tool {
 	return []types.Tool{
 		{
 			Name:  "memory_list",
@@ -22,7 +16,7 @@ func (s *Store) MemoryTools() []types.Tool {
 			Description: "List all files in your persistent memory. Memory survives across all conversations. Check this at the start of each conversation to recall what you know.",
 			Parameters:  map[string]any{},
 			Handler: func(_ context.Context, _ map[string]any) types.Result {
-				files, err := s.ListMemory()
+				files, err := st.ListMemory()
 				if err != nil {
 					return types.Result{Output: "error listing memory: " + err.Error(), IsErr: true}
 				}
@@ -52,7 +46,7 @@ func (s *Store) MemoryTools() []types.Tool {
 				if err != nil {
 					return types.ErrResult(err)
 				}
-				content, err := s.ReadMemory(file)
+				content, err := st.ReadMemory(file)
 				if err != nil {
 					return types.Result{Output: err.Error(), IsErr: true}
 				}
@@ -83,7 +77,7 @@ func (s *Store) MemoryTools() []types.Tool {
 				if err != nil {
 					return types.ErrResult(err)
 				}
-				if err := s.WriteMemory(file, content); err != nil {
+				if err := st.WriteMemory(file, content); err != nil {
 					return types.Result{Output: "error writing memory: " + err.Error(), IsErr: true}
 				}
 				return types.Result{Output: fmt.Sprintf("memory file %q updated (%d bytes)", file, len(content))}
@@ -105,54 +99,11 @@ func (s *Store) MemoryTools() []types.Tool {
 				if err != nil {
 					return types.ErrResult(err)
 				}
-				if err := s.DeleteMemory(file); err != nil {
+				if err := st.DeleteMemory(file); err != nil {
 					return types.Result{Output: "error deleting memory: " + err.Error(), IsErr: true}
 				}
 				return types.Result{Output: fmt.Sprintf("memory file %q deleted", file)}
 			},
 		},
 	}
-}
-
-// --- Implementation ---
-
-func (s *Store) ListMemory() ([]MemoryFile, error) {
-	entries, err := os.ReadDir(s.memoryDir())
-	if err != nil {
-		return nil, err
-	}
-	var out []MemoryFile
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		out = append(out, MemoryFile{Name: e.Name(), Size: info.Size()})
-	}
-	return out, nil
-}
-
-func (s *Store) ReadMemory(filename string) (string, error) {
-	safe := filepath.Base(filename)
-	data, err := os.ReadFile(filepath.Join(s.memoryDir(), safe))
-	if os.IsNotExist(err) {
-		return "", fmt.Errorf("memory file %q not found", safe)
-	}
-	return string(data), err
-}
-
-func (s *Store) WriteMemory(filename, content string) error {
-	safe := filepath.Base(filename)
-	if !strings.HasSuffix(safe, ".md") {
-		safe += ".md"
-	}
-	return os.WriteFile(filepath.Join(s.memoryDir(), safe), []byte(content), 0o644)
-}
-
-func (s *Store) DeleteMemory(filename string) error {
-	safe := filepath.Base(filename)
-	return os.Remove(filepath.Join(s.memoryDir(), safe))
 }

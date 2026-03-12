@@ -11,18 +11,18 @@ import (
 )
 
 type Manager struct {
-	store *store.Store
+	store store.Store
 	llm   llm.LLM
 }
 
-func NewManager(st *store.Store, client llm.LLM) *Manager {
+func NewManager(st store.Store, client llm.LLM) *Manager {
 	return &Manager{store: st, llm: client}
 }
 
 // Resolve returns the active episode for the session. If the user's message
 // starts a new topic, the current episode is closed and a fresh one is created.
 func (m *Manager) Resolve(ctx context.Context, sessionID, userMessage string) (*store.Episode, error) {
-	ep, err := m.store.LoadOrCreateActiveEpisode()
+	ep, err := m.loadOrCreateActiveEpisode()
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (m *Manager) Resolve(ctx context.Context, sessionID, userMessage string) (*
 
 // Reset force-closes the current episode and creates a new one (e.g. /new command).
 func (m *Manager) Reset(ctx context.Context, sessionID string) error {
-	ep, err := m.store.LoadOrCreateActiveEpisode()
+	ep, err := m.loadOrCreateActiveEpisode()
 	if err != nil {
 		return err
 	}
@@ -84,4 +84,18 @@ func (m *Manager) createAndMap() (*store.Episode, error) {
 		return nil, err
 	}
 	return ep, nil
+}
+
+// loadOrCreateActiveEpisode loads the active episode or creates a new one if
+// none exists or the stored one is no longer active. This logic was previously
+// in the store package but belongs here as episode lifecycle orchestration.
+func (m *Manager) loadOrCreateActiveEpisode() (*store.Episode, error) {
+	epID, err := m.store.GetActiveEpisodeID()
+	if err == nil && epID != "" {
+		ep, err := m.store.LoadEpisode(epID)
+		if err == nil && ep.Status == "active" {
+			return ep, nil
+		}
+	}
+	return m.createAndMap()
 }

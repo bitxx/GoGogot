@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"gogogot/internal/infra/utils"
 	"gogogot/internal/llm"
 	"gogogot/internal/llm/types"
 	"gogogot/internal/tools/store"
@@ -23,6 +24,11 @@ type summaryResult struct {
 	Title   string   `json:"title"`
 	Summary string   `json:"summary"`
 	Tags    []string `json:"tags"`
+}
+
+func TruncTitle(s string) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	return utils.Truncate(s, 60, "...")
 }
 
 // Close summarizes the episode via the LLM, then marks it closed and saves.
@@ -70,7 +76,7 @@ func (m *Manager) Close(ctx context.Context, ep *store.Episode) error {
 	if err != nil {
 		log.Error().Err(err).Str("episode", ep.ID).Msg("episode: summarization failed")
 		if len(messages) > 0 {
-			ep.Title = store.TruncTitle(messages[0].Content)
+			ep.Title = TruncTitle(messages[0].Content)
 		}
 		ep.Summary = "(summarization failed)"
 	} else {
@@ -79,7 +85,7 @@ func (m *Manager) Close(ctx context.Context, ep *store.Episode) error {
 		if result.Title != "" {
 			ep.Title = result.Title
 		} else if ep.Title == "" && len(messages) > 0 {
-			ep.Title = store.TruncTitle(messages[0].Content)
+			ep.Title = TruncTitle(messages[0].Content)
 		}
 		ep.Summary = result.Summary
 		ep.Tags = result.Tags

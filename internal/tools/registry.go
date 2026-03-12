@@ -19,7 +19,7 @@ type Registry struct {
 // EpisodeSearchFunc searches past episodes by semantic relevance.
 type EpisodeSearchFunc = store.EpisodeSearchFunc
 
-func NewRegistry(st *store.Store, braveAPIKey string, searchFn EpisodeSearchFunc, extra ...types.Tool) *Registry {
+func NewRegistry(st store.Store, braveAPIKey string, searchFn EpisodeSearchFunc, extra ...types.Tool) *Registry {
 	all := []types.Tool{
 		systemtools.BashTool(),
 		systemtools.EditFileTool(),
@@ -30,9 +30,9 @@ func NewRegistry(st *store.Store, braveAPIKey string, searchFn EpisodeSearchFunc
 	all = append(all, webtools.WebFetchTool())
 	all = append(all, webtools.WebRequestTool())
 	all = append(all, webtools.WebDownloadTool())
-	all = append(all, st.MemoryTools()...)
+	all = append(all, MemoryTools(st)...)
 	all = append(all, RecallTool(searchFn))
-	all = append(all, st.SkillTools()...)
+	all = append(all, SkillTools(st)...)
 	all = append(all, extra...)
 
 	r := &Registry{tt: make(map[string]types.Tool, len(all))}

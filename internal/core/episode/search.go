@@ -83,6 +83,44 @@ func (m *Manager) SearchRelevant(ctx context.Context, query string) ([]store.Epi
 	return matches, nil
 }
 
+// SearchEpisodes performs a simple word-based search over closed episodes.
+func (m *Manager) SearchEpisodes(query string) ([]store.EpisodeInfo, error) {
+	all, err := m.store.ListEpisodes()
+	if err != nil {
+		return nil, err
+	}
+
+	q := strings.ToLower(query)
+	words := strings.Fields(q)
+	if len(words) == 0 {
+		return nil, nil
+	}
+
+	var matches []store.EpisodeInfo
+	for _, ep := range all {
+		if ep.Status != "closed" || ep.Summary == "" {
+			continue
+		}
+		corpus := strings.ToLower(ep.Title + " " + ep.Summary + " " + strings.Join(ep.Tags, " "))
+		matched := false
+		for _, w := range words {
+			if strings.Contains(corpus, w) {
+				matched = true
+				break
+			}
+		}
+		if matched {
+			matches = append(matches, ep)
+		}
+	}
+
+	const maxResults = 5
+	if len(matches) > maxResults {
+		matches = matches[:maxResults]
+	}
+	return matches, nil
+}
+
 func parseSearchResponse(text string) []int {
 	text = strings.TrimSpace(text)
 

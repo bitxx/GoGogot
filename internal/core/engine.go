@@ -15,6 +15,7 @@ import (
 	"gogogot/internal/llm/types"
 	"gogogot/internal/tools"
 	"gogogot/internal/tools/store"
+	"gogogot/internal/tools/store/local"
 	"gogogot/internal/tools/system"
 	"sync"
 
@@ -29,7 +30,7 @@ type activeSession struct {
 type Engine struct {
 	ch        channel.Channel
 	agent     *agent.Agent
-	store     *store.Store
+	store     store.Store
 	episodes  *episode.Manager
 	scheduler *scheduler.Scheduler
 	registry  *tools.Registry
@@ -40,7 +41,7 @@ type Engine struct {
 
 func New(cfg *config.Config, ch channel.Channel) (*Engine, error) {
 
-	st, err := store.New(cfg.DataDir)
+	st, err := local.New(cfg.DataDir)
 	if err != nil {
 		return nil, fmt.Errorf("init store: %w", err)
 	}
@@ -55,7 +56,7 @@ func New(cfg *config.Config, ch channel.Channel) (*Engine, error) {
 	extra := append(transport.ChannelTools(),
 		system.ScheduleTools(sched)...,
 	)
-	extra = append(extra, st.IdentityTools(sched.SetLocation)...)
+	extra = append(extra, tools.IdentityTools(st, sched.SetLocation)...)
 
 	client := llm.NewClient(*provider, nil)
 	epMgr := episode.NewManager(st, client)
@@ -67,7 +68,7 @@ func New(cfg *config.Config, ch channel.Channel) (*Engine, error) {
 	transportName := ch.Name()
 	modelLabel := provider.Label
 	instructions := func() string {
-		skills, _ := store.LoadSkills(st.SkillsDir())
+		skills, _ := st.LoadSkills()
 		return prompt.SystemPrompt(prompt.PromptContext{
 			TransportName: transportName,
 			ModelLabel:    modelLabel,
