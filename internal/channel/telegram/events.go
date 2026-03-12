@@ -8,11 +8,11 @@ import (
 
 const (
 	minEditInterval = 800 * time.Millisecond
-	thinkingDelay   = 5 * time.Second
+	thinkingDelay   = 10 * time.Second
 )
 
 func buildToolStatus(d transport.ToolStartData, plan []transport.PlanTask) transport.AgentStatus {
-	label := toolLabel[d.Name]
+	label := d.Label
 	if label == "" {
 		label = d.Name
 	}
@@ -20,9 +20,9 @@ func buildToolStatus(d transport.ToolStartData, plan []transport.PlanTask) trans
 		label = label + ": " + d.Detail
 	}
 
-	phase := transport.PhaseTool
-	if d.Name == "task_plan" {
-		phase = transport.PhasePlanning
+	phase := transport.Phase(d.Phase)
+	if phase == "" {
+		phase = transport.PhaseTool
 	}
 
 	return transport.AgentStatus{Phase: phase, Tool: d.Name, Detail: label, Plan: plan}
@@ -225,7 +225,7 @@ func (r *replier) ConsumeEvents(ctx context.Context, events <-chan transport.Eve
 		case <-thinkCh:
 			thinkTimer = nil
 			thinkCh = nil
-			schedule(transport.AgentStatus{Phase: transport.PhaseThinking, Plan: currentPlan})
+			schedule(transport.AgentStatus{Phase: transport.PhasePlanning, Detail: "Planning next moves", Plan: currentPlan})
 		}
 	}
 }

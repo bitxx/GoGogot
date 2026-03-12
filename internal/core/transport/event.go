@@ -39,7 +39,9 @@ type LLMStreamData struct {
 
 type ToolStartData struct {
 	Name   string
+	Label  string
 	Detail string
+	Phase  string
 }
 
 type ToolEndData struct {

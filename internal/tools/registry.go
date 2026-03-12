@@ -64,6 +64,11 @@ func (r *Registry) Definitions() []llmtypes.ToolDef {
 	return out
 }
 
+func (r *Registry) Lookup(name string) (types.Tool, bool) {
+	t, ok := r.tt[name]
+	return t, ok
+}
+
 func (r *Registry) Register(t types.Tool) {
 	r.tt[t.Name] = t
 }

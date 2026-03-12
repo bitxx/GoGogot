@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"gogogot/internal/channel"
 	"gogogot/internal/channel/telegram"
 	"gogogot/internal/core"
 	"gogogot/internal/infra/config"
@@ -46,7 +47,7 @@ func main() {
 	fmt.Println("Shutting down.")
 }
 
-func notifyOwnerAndBlock(ch *telegram.Channel, providerErr error) {
+func notifyOwnerAndBlock(ch channel.Channel, providerErr error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -61,7 +62,7 @@ func notifyOwnerAndBlock(ch *telegram.Channel, providerErr error) {
 	<-sig
 }
 
-func buildChannel(cfg *config.Config) (*telegram.Channel, error) {
+func buildChannel(cfg *config.Config) (channel.Channel, error) {
 	switch cfg.Transport {
 	case "telegram":
 		if cfg.TelegramToken == "" {

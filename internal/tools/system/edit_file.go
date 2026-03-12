@@ -5,13 +5,21 @@ import (
 	"fmt"
 	"gogogot/internal/tools/types"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
 func EditFileTool() types.Tool {
 	return types.Tool{
 		Name:        "edit_file",
+		Label:       "Editing file",
 		Description: "Edit a file by replacing a specific string with a new one. Safer than write_file for modifying configs — only the matched portion changes. Returns error if old_string is not found.",
+		DetailFunc: func(input map[string]any) string {
+			if p, ok := input["path"].(string); ok {
+				return filepath.Base(p)
+			}
+			return ""
+		},
 		Parameters: map[string]any{
 			"path": map[string]any{
 				"type":        "string",

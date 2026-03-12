@@ -19,7 +19,12 @@ const (
 func BashTool() types.Tool {
 	return types.Tool{
 		Name:        "bash",
+		Label:       "Running command",
 		Description: "Execute a shell command and return stdout+stderr. Use for running programs, installing packages, git, docker, etc. Default timeout is 120s. For long-running commands (apt upgrade, docker build, large git clones) increase the timeout.",
+		DetailFunc: func(input map[string]any) string {
+			s, _ := input["command"].(string)
+			return s
+		},
 		Parameters: map[string]any{
 			"command": map[string]any{
 				"type":        "string",

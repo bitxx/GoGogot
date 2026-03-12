@@ -9,11 +9,20 @@ import (
 	"strings"
 )
 
+func pathDetail(input map[string]any) string {
+	if p, ok := input["path"].(string); ok {
+		return filepath.Base(p)
+	}
+	return ""
+}
+
 func FileTools() []types.Tool {
 	return []types.Tool{
 		{
 			Name:        "read_file",
+			Label:       "Reading file",
 			Description: "Read the contents of a file at the given path.",
+			DetailFunc:  pathDetail,
 			Parameters: map[string]any{
 				"path": map[string]any{
 					"type":        "string",
@@ -25,7 +34,9 @@ func FileTools() []types.Tool {
 		},
 		{
 			Name:        "write_file",
+			Label:       "Writing file",
 			Description: "Write content to a file, creating parent directories as needed.",
+			DetailFunc:  pathDetail,
 			Parameters: map[string]any{
 				"path": map[string]any{
 					"type":        "string",
@@ -41,6 +52,7 @@ func FileTools() []types.Tool {
 		},
 		{
 			Name:        "list_files",
+			Label:       "Listing files",
 			Description: "List files and directories at the given path.",
 			Parameters: map[string]any{
 				"path": map[string]any{

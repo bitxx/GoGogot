@@ -21,7 +21,8 @@ const (
 
 func WebDownloadTool() types.Tool {
 	return types.Tool{
-		Name:        "web_download",
+		Name:  "web_download",
+		Label: "Downloading",
 		Description: "Download a file from a URL and save it to disk. Use for fetching PDFs, images, archives, binaries, or any file. Max size 100 MB. If path is omitted, saves to /tmp with filename from URL.",
 		Parameters: map[string]any{
 			"url": map[string]any{

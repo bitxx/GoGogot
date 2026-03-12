@@ -20,10 +20,15 @@ type Handler func(ctx context.Context, input map[string]any) Result
 
 type Tool struct {
 	Name        string
+	Label       string // human-readable label for UI (e.g. "Running command")
 	Description string
 	Parameters  map[string]any
 	Required    []string
 	Handler     Handler
+
+	Interactive bool                           // agent loop handles user interaction; handler is skipped
+	Phase       string                         // UI phase override (e.g. "planning"); empty = default "tool"
+	DetailFunc  func(input map[string]any) string // extracts short context from input for UI display
 }
 
 func GetString(input map[string]any, key string) (string, error) {

@@ -20,7 +20,8 @@ func (s *Store) SkillTools() []types.Tool {
 	skillsDir := s.SkillsDir()
 	return []types.Tool{
 		{
-			Name:        "skill_list",
+			Name:  "skill_list",
+			Label: "Listing skills",
 			Description: "List all available skills with their name and description. Skills are reusable procedural knowledge — workflows, integrations, how-to guides — that you created from past experience.",
 			Parameters:  map[string]any{},
 			Handler: func(_ context.Context, _ map[string]any) types.Result {
@@ -39,7 +40,8 @@ func (s *Store) SkillTools() []types.Tool {
 			},
 		},
 		{
-			Name: "skill_read",
+			Name:  "skill_read",
+			Label: "Reading skill",
 			Description: "Read the full content of a skill's SKILL.md. Use this when a skill matches the current task — " +
 				"read it first, then follow the instructions inside.",
 			Parameters: map[string]any{
@@ -62,7 +64,8 @@ func (s *Store) SkillTools() []types.Tool {
 			},
 		},
 		{
-			Name: "skill_create",
+			Name:  "skill_create",
+			Label: "Creating skill",
 			Description: "Create a new skill to capture procedural knowledge for future reuse. " +
 				"Use after solving a non-trivial problem — save the workflow so you can do it better next time. " +
 				"The skill will appear in your available_skills on future conversations.",
@@ -103,7 +106,8 @@ func (s *Store) SkillTools() []types.Tool {
 			},
 		},
 		{
-			Name: "skill_update",
+			Name:  "skill_update",
+			Label: "Updating skill",
 			Description: "Update an existing skill's SKILL.md with new content. " +
 				"Read the skill first with skill_read, then write the improved version.",
 			Parameters: map[string]any{
@@ -134,7 +138,8 @@ func (s *Store) SkillTools() []types.Tool {
 			},
 		},
 		{
-			Name:        "skill_delete",
+			Name:  "skill_delete",
+			Label: "Deleting skill",
 			Description: "Delete a skill and its entire directory. Use when a skill is obsolete or incorrect.",
 			Parameters: map[string]any{
 				"name": map[string]any{

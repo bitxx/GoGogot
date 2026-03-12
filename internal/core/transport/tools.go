@@ -8,7 +8,8 @@ import (
 func ChannelTools() []types.Tool {
 	return []types.Tool{
 		{
-			Name:        "send_file",
+			Name:  "send_file",
+			Label: "Sending file",
 			Description: "Send a file (document, image, audio, video) back to the user through the current communication channel.",
 			Parameters: map[string]any{
 				"path": map[string]any{

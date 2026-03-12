@@ -5,8 +5,6 @@ import (
 	"gogogot/internal/core/agent/hook"
 	"gogogot/internal/llm/types"
 	"gogogot/internal/tools/store"
-	"net/url"
-	"path/filepath"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -64,28 +62,3 @@ func unmarshalToolInput(raw json.RawMessage) map[string]any {
 	return input
 }
 
-const maxDetailLen = 60
-
-func extractToolDetail(name string, input map[string]any) string {
-	var detail string
-	switch name {
-	case "bash":
-		detail, _ = input["command"].(string)
-	case "edit_file", "read_file", "write_file":
-		if p, ok := input["path"].(string); ok {
-			detail = filepath.Base(p)
-		}
-	case "web_search":
-		detail, _ = input["query"].(string)
-	case "web_fetch":
-		if raw, ok := input["url"].(string); ok {
-			if u, err := url.Parse(raw); err == nil {
-				detail = u.Host
-			}
-		}
-	}
-	if len(detail) > maxDetailLen {
-		detail = detail[:maxDetailLen] + "..."
-	}
-	return detail
-}

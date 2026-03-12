@@ -11,7 +11,8 @@ import (
 // RecallTool builds the recall tool that delegates search to the provided function.
 func RecallTool(searchFn store.EpisodeSearchFunc) types.Tool {
 	return types.Tool{
-		Name:        "recall",
+		Name:  "recall",
+		Label: "Recalling history",
 		Description: "Search your conversation history for past context. Use when the user references something from a previous conversation, or when you need to recall what was discussed before. Returns summaries of matching past episodes.",
 		Parameters: map[string]any{
 			"query": map[string]any{

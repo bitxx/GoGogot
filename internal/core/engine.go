@@ -66,21 +66,30 @@ func New(cfg *config.Config, ch channel.Channel) (*Engine, error) {
 
 	transportName := ch.Name()
 	modelLabel := provider.Label
-	agentCfg := agent.Config{
-		PromptLoader: func() prompt.PromptContext {
-			skills, _ := store.LoadSkills(st.SkillsDir())
-			return prompt.PromptContext{
-				TransportName: transportName,
-				ModelLabel:    modelLabel,
-				Soul:          st.ReadSoul(),
-				User:          st.ReadUser(),
-				SkillsBlock:   store.FormatSkillsForPrompt(skills),
-				Timezone:      st.LoadTimezone(),
-			}
-		},
-		MaxTokens:  cfg.MaxTokens,
-		Compaction: hook.DefaultCompactionConfig(),
+	instructions := func() string {
+		skills, _ := store.LoadSkills(st.SkillsDir())
+		return prompt.SystemPrompt(prompt.PromptContext{
+			TransportName: transportName,
+			ModelLabel:    modelLabel,
+			Soul:          st.ReadSoul(),
+			User:          st.ReadUser(),
+			SkillsBlock:   store.FormatSkillsForPrompt(skills),
+			Timezone:      st.LoadTimezone(),
+		})
 	}
+
+	compaction := hook.NewCompaction()
+	compaction.WithSummarizer(func(ctx context.Context, prompt string) (string, error) {
+		msgs := []types.Message{types.NewUserMessage(types.TextBlock(prompt))}
+		resp, err := client.Call(ctx, msgs, llm.CallOptions{
+			System:  compaction.SummaryPrompt,
+			NoTools: true,
+		})
+		if err != nil {
+			return "", err
+		}
+		return types.ExtractText(resp.Content), nil
+	})
 
 	eng := &Engine{
 		ch:        ch,
@@ -90,7 +99,8 @@ func New(cfg *config.Config, ch channel.Channel) (*Engine, error) {
 		registry:  reg,
 		sessions:  make(map[string]*activeSession),
 	}
-	eng.agent = agent.New(client, agentCfg, reg)
+	eng.agent = agent.New(client, instructions, reg)
+	eng.agent.AddBeforeHook(compaction.BeforeHook())
 
 	ownerSessionID, ownerReply := ch.OwnerSession()
 	sched.SetExecutor(func(ctx context.Context, taskID, command, skill string) (string, error) {

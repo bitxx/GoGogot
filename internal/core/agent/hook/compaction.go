@@ -13,32 +13,6 @@ import (
 
 const charsPerToken = 4
 
-// CompactionConfig controls when and how conversation messages are compacted.
-type CompactionConfig struct {
-	Threshold      float64 // 0.0–1.0, fraction of context window that triggers compaction
-	SafetyMargin   float64 // 1.2 = 20% buffer for token estimate inaccuracy
-	PreserveRecent int     // number of recent messages to keep uncompressed
-	SummaryPrompt  string  // instruction for the summarization LLM call
-}
-
-func DefaultCompactionConfig() CompactionConfig {
-	return CompactionConfig{
-		Threshold:      0.8,
-		SafetyMargin:   1.2,
-		PreserveRecent: 5,
-		SummaryPrompt:  "Summarize the conversation so far. Preserve decisions, TODOs, constraints, errors, file paths mentioned, the current plan, and task_plan checklist state (task IDs, titles, statuses).",
-	}
-}
-
-func (cc *CompactionConfig) ShouldCompact(estimatedTokens, contextWindow int) bool {
-	if contextWindow <= 0 || cc.Threshold <= 0 {
-		return false
-	}
-	adjusted := float64(estimatedTokens) * cc.SafetyMargin
-	limit := cc.Threshold * float64(contextWindow)
-	return adjusted > limit
-}
-
 // EstimateTokens approximates token count from messages (chars / 4).
 func EstimateTokens(messages []store.Turn) int {
 	var chars int
@@ -95,12 +69,42 @@ func contentToString(blocks []types.ContentBlock) string {
 // Summarizer produces a concise summary from a conversation transcript.
 type Summarizer func(ctx context.Context, prompt string) (string, error)
 
-// CompactionBeforeIteration returns a BeforeIterationFunc that compacts
-// conversation messages when they exceed the context window threshold.
-func CompactionBeforeIteration(
-	cfg CompactionConfig,
-	summarize Summarizer,
-) BeforeIterationFunc {
+// Compaction is a self-contained compaction hook. Create with NewCompaction,
+// attach a summarizer via WithSummarizer, and register via BeforeHook().
+type Compaction struct {
+	Threshold      float64 // 0.0–1.0, fraction of context window that triggers compaction
+	SafetyMargin   float64 // 1.2 = 20 % buffer for token estimate inaccuracy
+	PreserveRecent int     // number of recent messages to keep uncompressed
+	SummaryPrompt  string  // instruction for the summarization LLM call
+	summarizer     Summarizer
+}
+
+func NewCompaction() *Compaction {
+	return &Compaction{
+		Threshold:      0.8,
+		SafetyMargin:   1.2,
+		PreserveRecent: 5,
+		SummaryPrompt:  "Summarize the conversation so far. Preserve decisions, TODOs, constraints, errors, file paths mentioned, the current plan, and task_plan checklist state (task IDs, titles, statuses).",
+	}
+}
+
+func (c *Compaction) WithSummarizer(s Summarizer) *Compaction {
+	c.summarizer = s
+	return c
+}
+
+func (c *Compaction) shouldCompact(estimatedTokens, contextWindow int) bool {
+	if contextWindow <= 0 || c.Threshold <= 0 {
+		return false
+	}
+	adjusted := float64(estimatedTokens) * c.SafetyMargin
+	limit := c.Threshold * float64(contextWindow)
+	return adjusted > limit
+}
+
+// BeforeHook returns a BeforeIterationFunc that compacts conversation messages
+// when they exceed the context window threshold.
+func (c *Compaction) BeforeHook() BeforeIterationFunc {
 	return func(ctx context.Context, ic *IterationContext) {
 		if ic.ContextWindow <= 0 || ic.Conversation == nil {
 			return
@@ -108,29 +112,29 @@ func CompactionBeforeIteration(
 
 		msgs := ic.Conversation.Messages()
 		estimated := EstimateTokens(msgs)
-		if !cfg.ShouldCompact(estimated, ic.ContextWindow) {
+		if !c.shouldCompact(estimated, ic.ContextWindow) {
 			return
 		}
 
 		log.Info().
 			Int("estimated_tokens", estimated).
 			Int("context_window", ic.ContextWindow).
-			Float64("threshold", cfg.Threshold).
+			Float64("threshold", c.Threshold).
 			Msg("compaction triggered")
 
 		n := len(msgs)
-		if n <= cfg.PreserveRecent {
+		if n <= c.PreserveRecent {
 			return
 		}
 
-		cutoff := n - cfg.PreserveRecent
+		cutoff := n - c.PreserveRecent
 		old := msgs[:cutoff]
 		recent := msgs[cutoff:]
 
 		transcript := renderTranscript(old)
-		prompt := cfg.SummaryPrompt + "\n\n---\n\n" + transcript
+		prompt := c.SummaryPrompt + "\n\n---\n\n" + transcript
 
-		summary, err := summarize(ctx, prompt)
+		summary, err := c.summarizer(ctx, prompt)
 		if err != nil {
 			log.Error().Err(err).Msg("compaction summarize failed")
 			return

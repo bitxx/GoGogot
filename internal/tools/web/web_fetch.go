@@ -7,6 +7,7 @@ import (
 	"gogogot/internal/tools/types"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"time"
 
@@ -28,7 +29,16 @@ var skipTags = map[string]bool{
 func WebFetchTool() types.Tool {
 	return types.Tool{
 		Name:        "web_fetch",
+		Label:       "Reading webpage",
 		Description: "Fetch a web page and return its text content (HTML tags stripped). Use this to read documentation, articles, API responses, or any web page. For search results use web_search instead.",
+		DetailFunc: func(input map[string]any) string {
+			if raw, ok := input["url"].(string); ok {
+				if u, err := neturl.Parse(raw); err == nil {
+					return u.Host
+				}
+			}
+			return ""
+		},
 		Parameters: map[string]any{
 			"url": map[string]any{
 				"type":        "string",

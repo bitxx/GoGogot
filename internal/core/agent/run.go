@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 	"gogogot/internal/core/agent/hook"
-	"gogogot/internal/core/prompt"
 	"gogogot/internal/core/transport"
 	"gogogot/internal/llm"
 	"gogogot/internal/llm/types"
 	"gogogot/internal/tools/store"
-	toolTypes "gogogot/internal/tools/types"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -50,7 +48,7 @@ func (a *Agent) Run(ctx context.Context, conv hook.Conversation, userBlocks []ty
 		}
 
 		msgs := buildLLMMessages(conv)
-		sys := prompt.SystemPrompt(a.config.PromptLoader())
+		sys := a.instructions()
 
 		tokensBefore := hook.EstimateTokens(conv.Messages())
 		msgCountBefore := len(conv.Messages())
@@ -136,16 +134,35 @@ func (a *Agent) Run(ctx context.Context, conv hook.Conversation, userBlocks []ty
 	return nil
 }
 
+const maxDetailLen = 60
+
 func (a *Agent) executeToolCallLoop(ctx context.Context, toolCalls []types.ContentBlock, counter *int) ([]types.ContentBlock, []hook.ToolCallSummary) {
 	results := make([]types.ContentBlock, 0, len(toolCalls))
 	summaries := make([]hook.ToolCallSummary, 0, len(toolCalls))
 
+	toolCtx := transport.WithBus(ctx, a.bus)
+
 	for _, tc := range toolCalls {
 		input := unmarshalToolInput(tc.ToolInput)
+		tool, _ := a.lookupTool(tc.ToolName)
+
+		label := tool.Label
+		if label == "" {
+			label = tc.ToolName
+		}
+		var detail string
+		if tool.DetailFunc != nil {
+			detail = tool.DetailFunc(input)
+			if len(detail) > maxDetailLen {
+				detail = detail[:maxDetailLen] + "..."
+			}
+		}
 
 		a.bus.Emit(transport.ToolStart, transport.ToolStartData{
 			Name:   tc.ToolName,
-			Detail: extractToolDetail(tc.ToolName, input),
+			Label:  label,
+			Detail: detail,
+			Phase:  tool.Phase,
 		})
 		*counter++
 
@@ -158,10 +175,8 @@ func (a *Agent) executeToolCallLoop(ctx context.Context, toolCalls []types.Conte
 			continue
 		}
 
-		// ask_user: intercept, emit Ask event, block for response
-		if tc.ToolName == "ask_user" {
+		if tool.Interactive {
 			resp, err := a.handleAskUser(ctx, input)
-			elapsed := time.Duration(0)
 			isErr := err != nil
 			output := resp
 			if isErr {
@@ -169,19 +184,13 @@ func (a *Agent) executeToolCallLoop(ctx context.Context, toolCalls []types.Conte
 			}
 			a.bus.Emit(transport.ToolEnd, transport.ToolEndData{Name: tc.ToolName, Result: output})
 			results = append(results, types.ToolResultBlock(tc.ToolUseID, output, isErr))
-			summaries = append(summaries, hook.ToolCallSummary{Name: tc.ToolName, Duration: elapsed, IsErr: isErr})
+			summaries = append(summaries, hook.ToolCallSummary{Name: tc.ToolName, Duration: 0, IsErr: isErr})
 			continue
 		}
 
-		// BEFORE executeTool: emit model events from input data
-		a.emitPreToolEvents(tc.ToolName, input)
-
 		start := time.Now()
-		toolResult := a.executeTool(ctx, tc.ToolName, input)
+		toolResult := a.executeTool(toolCtx, tc.ToolName, input)
 		elapsed := time.Since(start)
-
-		// AFTER executeTool: emit model events from result/state
-		a.emitPostToolEvents(tc.ToolName, toolResult)
 
 		a.bus.Emit(transport.ToolEnd, transport.ToolEndData{
 			Name: tc.ToolName, Result: toolResult.Output, DurationMs: elapsed.Milliseconds(),
@@ -192,32 +201,6 @@ func (a *Agent) executeToolCallLoop(ctx context.Context, toolCalls []types.Conte
 	}
 
 	return results, summaries
-}
-
-func (a *Agent) emitPreToolEvents(name string, input map[string]any) {
-	switch name {
-	case "report_status":
-		text, _ := input["text"].(string)
-		var pct *int
-		if v, ok := input["percent"].(float64); ok {
-			i := int(v)
-			pct = &i
-		}
-		a.bus.Emit(transport.Progress, transport.ProgressData{Status: text, Percent: pct})
-	case "send_message":
-		text, _ := input["text"].(string)
-		level, _ := input["level"].(string)
-		a.bus.Emit(transport.Message, transport.MessageData{
-			Text:  text,
-			Level: transport.MessageLevel(level),
-		})
-	}
-}
-
-func (a *Agent) emitPostToolEvents(name string, result toolTypes.Result) {
-	if name == "task_plan" && !result.IsErr {
-		a.bus.Emit(transport.Progress, transport.ProgressData{Tasks: a.taskPlan.Snapshot()})
-	}
 }
 
 func (a *Agent) handleAskUser(ctx context.Context, input map[string]any) (string, error) {

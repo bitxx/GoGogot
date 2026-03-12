@@ -154,7 +154,9 @@ func (tp *TaskPlan) Snapshot() []transport.PlanTask {
 // TaskPlanTool returns the task_plan tool wired to the given TaskPlan state.
 func TaskPlanTool(tp *TaskPlan) types.Tool {
 	return types.Tool{
-		Name: "task_plan",
+		Name:  "task_plan",
+		Label: "Planning",
+		Phase: "planning",
 		Description: "Manage a session task checklist. Use to break complex work into steps and track progress. " +
 			"Actions: create (batch-replace list), add (append one task), update (change status), list (show all), delete (clear all).",
 		Parameters: map[string]any{
@@ -182,11 +184,13 @@ func TaskPlanTool(tp *TaskPlan) types.Tool {
 			},
 		},
 		Required: []string{"action"},
-		Handler: func(_ context.Context, input map[string]any) types.Result {
+		Handler: func(ctx context.Context, input map[string]any) types.Result {
 			action, err := types.GetString(input, "action")
 			if err != nil {
 				return types.ErrResult(err)
 			}
+
+			var result types.Result
 			switch action {
 			case "create":
 				raw, ok := input["tasks"].([]any)
@@ -202,11 +206,11 @@ func TaskPlanTool(tp *TaskPlan) types.Tool {
 				if len(entries) == 0 {
 					return types.Result{Output: "'tasks' entries must be objects with a 'title' field", IsErr: true}
 				}
-				return tp.create(entries)
+				result = tp.create(entries)
 
 			case "add":
 				title := types.GetStringOpt(input, "title")
-				return tp.add(title)
+				result = tp.add(title)
 
 			case "update":
 				id, err := types.GetInt(input, "id")
@@ -217,13 +221,13 @@ func TaskPlanTool(tp *TaskPlan) types.Tool {
 				if err != nil {
 					return types.ErrResult(err)
 				}
-				return tp.update(id, status)
+				result = tp.update(id, status)
 
 			case "list":
-				return tp.list()
+				result = tp.list()
 
 			case "delete":
-				return tp.deleteAll()
+				result = tp.deleteAll()
 
 			default:
 				return types.Result{
@@ -231,6 +235,13 @@ func TaskPlanTool(tp *TaskPlan) types.Tool {
 					IsErr:  true,
 				}
 			}
+
+			if !result.IsErr {
+				if bus, ok := transport.BusFromContext(ctx); ok {
+					bus.Emit(transport.Progress, transport.ProgressData{Tasks: tp.Snapshot()})
+				}
+			}
+			return result
 		},
 	}
 }
