@@ -5,18 +5,13 @@ import (
 	"fmt"
 	"gogogot/internal/channel"
 	"gogogot/internal/core/agent"
-	"gogogot/internal/core/agent/hook"
 	"gogogot/internal/core/episode"
 	"gogogot/internal/core/prompt"
 	"gogogot/internal/core/transport"
-	"gogogot/internal/infra/config"
 	"gogogot/internal/infra/scheduler"
-	"gogogot/internal/llm"
 	"gogogot/internal/llm/types"
 	"gogogot/internal/tools"
 	"gogogot/internal/tools/store"
-	"gogogot/internal/tools/store/local"
-	"gogogot/internal/tools/system"
 	"sync"
 
 	"github.com/rs/zerolog/log"
@@ -39,79 +34,32 @@ type Engine struct {
 	sessions map[string]*activeSession
 }
 
-func New(cfg *config.Config, ch channel.Channel) (*Engine, error) {
+type Params struct {
+	Channel   channel.Channel
+	Store     store.Store
+	Agent     *agent.Agent
+	Episodes  *episode.Manager
+	Scheduler *scheduler.Scheduler
+	Registry  *tools.Registry
+}
 
-	st, err := local.New(cfg.DataDir)
-	if err != nil {
-		return nil, fmt.Errorf("init store: %w", err)
-	}
-
-	provider, err := resolveProvider(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	sched := scheduler.New(cfg.DataDir, nil, st.LoadTimezone(), scheduler.Options{
-		TaskTimeout:   cfg.Scheduler.TaskTimeout,
-		MaxConcurrent: cfg.Scheduler.MaxConcurrent,
-	})
-
-	extra := append(transport.ChannelTools(),
-		system.ScheduleTools(sched)...,
-	)
-	extra = append(extra, tools.IdentityTools(st, sched.SetLocation)...)
-
-	client := llm.NewClient(*provider, nil)
-	epMgr := episode.NewManager(st, client)
-
-	reg := tools.NewRegistry(st, cfg.BraveAPIKey, epMgr.SearchRelevant, extra...)
-
-	client.SetTools(reg.Definitions())
-
-	transportName := ch.Name()
-	modelLabel := provider.Label
-	instructions := func() string {
-		skills, _ := st.LoadSkills()
-		return prompt.SystemPrompt(prompt.PromptContext{
-			TransportName: transportName,
-			ModelLabel:    modelLabel,
-			Soul:          st.ReadSoul(),
-			User:          st.ReadUser(),
-			SkillsBlock:   store.FormatSkillsForPrompt(skills),
-			Timezone:      st.LoadTimezone(),
-		})
-	}
-
-	compaction := hook.NewCompaction()
-	compaction.WithSummarizer(func(ctx context.Context, prompt string) (string, error) {
-		msgs := []types.Message{types.NewUserMessage(types.TextBlock(prompt))}
-		resp, err := client.Call(ctx, msgs, llm.CallOptions{
-			System:  compaction.SummaryPrompt,
-			NoTools: true,
-		})
-		if err != nil {
-			return "", err
-		}
-		return types.ExtractText(resp.Content), nil
-	})
-
+func New(p Params) *Engine {
 	eng := &Engine{
-		ch:        ch,
-		store:     st,
-		episodes:  epMgr,
-		scheduler: sched,
-		registry:  reg,
+		ch:        p.Channel,
+		store:     p.Store,
+		agent:     p.Agent,
+		episodes:  p.Episodes,
+		scheduler: p.Scheduler,
+		registry:  p.Registry,
 		sessions:  make(map[string]*activeSession),
 	}
-	eng.agent = agent.New(client, instructions, reg)
-	eng.agent.AddBeforeHook(compaction.BeforeHook())
 
-	ownerSessionID, ownerReply := ch.OwnerSession()
-	sched.SetExecutor(func(ctx context.Context, taskID, command, skill string) (string, error) {
+	ownerSessionID, ownerReply := p.Channel.OwnerSession()
+	p.Scheduler.SetExecutor(func(ctx context.Context, taskID, command, skill string) (string, error) {
 		return eng.RunScheduledTask(ctx, ownerSessionID, ownerReply, taskID, command, skill)
 	})
 
-	return eng, nil
+	return eng
 }
 
 func (e *Engine) Run(ctx context.Context) error {
@@ -121,16 +69,6 @@ func (e *Engine) Run(ctx context.Context) error {
 	defer e.scheduler.Stop()
 
 	return e.ch.Run(ctx, e.handleMessage)
-}
-
-func resolveProvider(cfg *config.Config) (*llm.Provider, error) {
-	if cfg.LLM.Provider == "" {
-		return nil, fmt.Errorf("GOGOGOT_PROVIDER is required — set to 'anthropic', 'openai', or 'openrouter'")
-	}
-	if cfg.LLM.Model == "" {
-		return nil, fmt.Errorf("GOGOGOT_MODEL is required — use an exact model ID (e.g. claude-sonnet-4-6, gpt-4o) or an OpenRouter slug (vendor/model)")
-	}
-	return llm.ResolveProvider(cfg.LLM.Model, cfg.LLM.Provider)
 }
 
 func (e *Engine) Channel() channel.Channel {

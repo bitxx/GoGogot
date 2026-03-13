@@ -6,8 +6,20 @@ import (
 	"gogogot/internal/channel"
 	"gogogot/internal/channel/telegram"
 	"gogogot/internal/core"
+	"gogogot/internal/core/agent"
+	"gogogot/internal/core/agent/hook"
+	"gogogot/internal/core/episode"
+	"gogogot/internal/core/prompt"
+	"gogogot/internal/core/transport"
 	"gogogot/internal/infra/config"
 	"gogogot/internal/infra/logger"
+	"gogogot/internal/infra/scheduler"
+	"gogogot/internal/llm"
+	"gogogot/internal/llm/types"
+	"gogogot/internal/tools"
+	"gogogot/internal/tools/store"
+	"gogogot/internal/tools/store/local"
+	"gogogot/internal/tools/system"
 	"os"
 	"os/signal"
 	"syscall"
@@ -31,7 +43,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	eng, err := core.New(cfg, ch)
+	eng, err := buildEngine(cfg, ch)
 	if err != nil {
 		notifyOwnerAndBlock(ch, err)
 		return
@@ -60,6 +72,83 @@ func notifyOwnerAndBlock(ch channel.Channel, providerErr error) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
+}
+
+func buildEngine(cfg *config.Config, ch channel.Channel) (*core.Engine, error) {
+	st, err := local.New(cfg.DataDir)
+	if err != nil {
+		return nil, fmt.Errorf("init store: %w", err)
+	}
+
+	provider, err := resolveProvider(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	sched := scheduler.New(cfg.DataDir, nil, st.LoadTimezone(), scheduler.Options{
+		TaskTimeout:   cfg.Scheduler.TaskTimeout,
+		MaxConcurrent: cfg.Scheduler.MaxConcurrent,
+	})
+
+	extra := append(transport.ChannelTools(),
+		system.ScheduleTools(sched)...,
+	)
+	extra = append(extra, tools.IdentityTools(st, sched.SetLocation)...)
+
+	client := llm.NewClient(*provider, nil)
+	epMgr := episode.NewManager(st, client)
+
+	reg := tools.NewRegistry(st, cfg.BraveAPIKey, epMgr.SearchRelevant, extra...)
+	client.SetTools(reg.Definitions())
+
+	transportName := ch.Name()
+	modelLabel := provider.Label
+	instructions := func() string {
+		skills, _ := st.LoadSkills()
+		return prompt.SystemPrompt(prompt.PromptContext{
+			TransportName: transportName,
+			ModelLabel:    modelLabel,
+			Soul:          st.ReadSoul(),
+			User:          st.ReadUser(),
+			SkillsBlock:   store.FormatSkillsForPrompt(skills),
+			Timezone:      st.LoadTimezone(),
+		})
+	}
+
+	compaction := hook.NewCompaction()
+	compaction.WithSummarizer(func(ctx context.Context, p string) (string, error) {
+		msgs := []types.Message{types.NewUserMessage(types.TextBlock(p))}
+		resp, err := client.Call(ctx, msgs, llm.CallOptions{
+			System:  compaction.SummaryPrompt,
+			NoTools: true,
+		})
+		if err != nil {
+			return "", err
+		}
+		return types.ExtractText(resp.Content), nil
+	})
+
+	ag := agent.New(client, instructions, reg)
+	ag.AddBeforeHook(compaction.BeforeHook())
+
+	return core.New(core.Params{
+		Channel:   ch,
+		Store:     st,
+		Agent:     ag,
+		Episodes:  epMgr,
+		Scheduler: sched,
+		Registry:  reg,
+	}), nil
+}
+
+func resolveProvider(cfg *config.Config) (*llm.Provider, error) {
+	if cfg.LLM.Provider == "" {
+		return nil, fmt.Errorf("GOGOGOT_PROVIDER is required — set to 'anthropic', 'openai', or 'openrouter'")
+	}
+	if cfg.LLM.Model == "" {
+		return nil, fmt.Errorf("GOGOGOT_MODEL is required — use an exact model ID (e.g. claude-sonnet-4-6, gpt-4o) or an OpenRouter slug (vendor/model)")
+	}
+	return llm.ResolveProvider(cfg.LLM.Model, cfg.LLM.Provider)
 }
 
 func buildChannel(cfg *config.Config) (channel.Channel, error) {
