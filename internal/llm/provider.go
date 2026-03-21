@@ -49,6 +49,9 @@ var (
 	openaiOnce    sync.Once
 	openaiCatalog map[string]catalog.ModelDef
 
+	deepseekOnce    sync.Once
+	deepseekCatalog map[string]catalog.ModelDef
+
 	openrouterOnce    sync.Once
 	openrouterCatalog map[string]catalog.ModelDef
 )
@@ -61,6 +64,11 @@ func getAnthropicCatalog() map[string]catalog.ModelDef {
 func getOpenAICatalog() map[string]catalog.ModelDef {
 	openaiOnce.Do(func() { openaiCatalog = catalog.OpenAI() })
 	return openaiCatalog
+}
+
+func getDeepSeekCatalog() map[string]catalog.ModelDef {
+	deepseekOnce.Do(func() { deepseekCatalog = catalog.DeepSeek() })
+	return deepseekCatalog
 }
 
 func getOpenRouterCatalog() map[string]catalog.ModelDef {
@@ -93,6 +101,15 @@ func ResolveProvider(modelID, provider string) (*Provider, error) {
 		}
 		return resolveOpenAI(modelID)
 
+	case "deepseek":
+		if strings.Contains(modelID, "/") {
+			return nil, fmt.Errorf("model %q is an OpenRouter slug — use GOGOGOT_PROVIDER=openrouter", modelID)
+		}
+		if _, ok := getDeepSeekCatalog()[modelID]; !ok {
+			return nil, fmt.Errorf("unknown DeepSeek model %q — available: %s", modelID, catalogKeys(getDeepSeekCatalog()))
+		}
+		return resolveDeepSeek(modelID)
+
 	case "openrouter":
 		if _, ok := getAnthropicCatalog()[modelID]; ok {
 			if orSlug, ok := anthropicToOpenRouter[modelID]; ok {
@@ -109,7 +126,7 @@ func ResolveProvider(modelID, provider string) (*Provider, error) {
 		return resolveOpenRouter(modelID, modelID)
 
 	default:
-		return nil, fmt.Errorf("unknown provider %q — use 'anthropic', 'openai', or 'openrouter'", provider)
+		return nil, fmt.Errorf("unknown provider %q — use 'anthropic', 'openai', 'deepseek', or 'openrouter'", provider)
 	}
 }
 
@@ -127,6 +144,14 @@ func resolveOpenAI(model string) (*Provider, error) {
 		return nil, fmt.Errorf("OPENAI_API_KEY not set for model %q", model)
 	}
 	return providerFromDef(getOpenAICatalog()[model], model, apiKey, "https://api.openai.com/v1", "openai"), nil
+}
+
+func resolveDeepSeek(model string) (*Provider, error) {
+	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("DEEPSEEK_API_KEY not set for model %q", model)
+	}
+	return providerFromDef(getDeepSeekCatalog()[model], model, apiKey, "https://api.deepseek.com/anthropic", "deepseek"), nil
 }
 
 func resolveOpenRouter(id, slug string) (*Provider, error) {

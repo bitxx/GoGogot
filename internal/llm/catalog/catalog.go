@@ -21,11 +21,15 @@ var openaiJSON []byte
 //go:embed anthropic.json
 var anthropicJSON []byte
 
+//go:embed deepseek.json
+var deepseekJSON []byte
+
 //go:embed openrouter_models.json
 var openrouterJSON []byte
 
 func OpenAI() map[string]ModelDef     { return loadClean(openaiJSON) }
 func Anthropic() map[string]ModelDef  { return loadClean(anthropicJSON) }
+func DeepSeek() map[string]ModelDef   { return loadClean(deepseekJSON) }
 func OpenRouter() map[string]ModelDef { return loadOpenRouter(openrouterJSON) }
 
 func loadClean(data []byte) map[string]ModelDef {

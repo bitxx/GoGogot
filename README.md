@@ -1,5 +1,8 @@
 ![GoGogot](https://octagon-lab.sfo3.cdn.digitaloceanspaces.com/gogogot.jpg)
 
+
+
+
 # GoGogot — Lightweight OpenClaw Written in Go
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/aspasskiy/GoGogot?style=flat-square)](https://go.dev)
@@ -77,11 +80,12 @@ go run ./cmd
 
 Set `GOGOGOT_PROVIDER`, `GOGOGOT_MODEL`, and the corresponding API key. The agent will not start without all three.
 
-| Provider | `GOGOGOT_PROVIDER` | API key env | Example `GOGOGOT_MODEL` |
-|---|---|---|---|
-| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5` |
-| OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4o`, `gpt-4.1`, `gpt-5.4`, `o3`, `o4-mini` |
-| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `deepseek/deepseek-v3.2`, `google/gemini-3-flash-preview` |
+| Provider   | `GOGOGOT_PROVIDER` | API key env          | Example `GOGOGOT_MODEL`                                    |
+|------------|--------------------|----------------------|------------------------------------------------------------|
+| Anthropic  | `anthropic`        | `ANTHROPIC_API_KEY`  | `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5` |
+| OpenAI     | `openai`           | `OPENAI_API_KEY`     | `gpt-4o`, `gpt-4.1`, `gpt-5.4`, `o3`, `o4-mini`            |
+| DeepSeek   | `deepseek`         | `DEEPSEEK_API_KEY`   | `deepseek-chat-3.2`, `deepseek-reasoner-3.2`              |
+| OpenRouter | `openrouter`       | `OPENROUTER_API_KEY` | `deepseek/deepseek-v3.2`, `google/gemini-3-flash-preview`  |
 
 Model metadata (context window, vision support, pricing) is stored in JSON catalogs under [`llm/catalog/`](internal/llm/catalog/) — just edit the JSON to add or update models.
 
