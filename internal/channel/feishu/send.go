@@ -5,13 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"strings"
 
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	"github.com/rs/zerolog/log"
-
-	"gogogot/internal/core/transport"
 )
 
 // ---------------------------------------------------------------------------
@@ -140,35 +137,6 @@ func (c *Channel) sendFile(ctx context.Context, chatID string, data []byte, file
 		c.sendLong(ctx, chatID, caption)
 	}
 	return nil
-}
-
-// downloadResource fetches an image or file attached to a message.
-func (c *Channel) downloadResource(ctx context.Context, messageID, fileKey, resourceType string) ([]transport.Attachment, error) {
-	resp, err := c.api.Im.MessageResource.Get(ctx,
-		larkim.NewGetMessageResourceReqBuilder().
-			MessageId(messageID).
-			FileKey(fileKey).
-			Type(resourceType).
-			Build())
-	if err != nil || !resp.Success() {
-		return nil, fmt.Errorf("feishu downloadResource code=%d: %w", resp.Code, firstErr(err))
-	}
-	defer func() {
-		if rc, ok := resp.File.(io.ReadCloser); ok {
-			_ = rc.Close()
-		}
-	}()
-	data, err := io.ReadAll(resp.File)
-	if err != nil {
-		return nil, fmt.Errorf("feishu read resource: %w", err)
-	}
-	mime := "application/octet-stream"
-	filename := fileKey
-	if resourceType == "image" {
-		mime = "image/jpeg"
-		filename = fileKey + ".jpg"
-	}
-	return []transport.Attachment{{Filename: filename, MimeType: mime, Data: data}}, nil
 }
 
 // ---------------------------------------------------------------------------

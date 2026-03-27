@@ -2,6 +2,8 @@ package feishu
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	"github.com/rs/zerolog/log"
@@ -15,7 +17,6 @@ func (c *Channel) defaultHandler(ctx context.Context, event *larkim.P2MessageRec
 		return
 	}
 
-	// Only process messages from the owner.
 	senderID := event.Event.Sender.SenderId
 	if senderID == nil || strVal(senderID.OpenId) != c.ownerID {
 		log.Trace().Msg("feishu: ignoring message from non-owner")
@@ -31,13 +32,43 @@ func (c *Channel) defaultHandler(ctx context.Context, event *larkim.P2MessageRec
 	c.convertAndDispatch(ctx, chatID, msg)
 }
 
-// handleCallback is called when the owner clicks a button in an interactive card.
-// value is the string stored in the button's "value" field.
-func (c *Channel) handleCallback(ctx context.Context, chatID, value string) {
+// handleCardAction is called when the owner clicks a button in an interactive
+// card. It mirrors Telegram's handleCallback exactly.
+func (c *Channel) handleCardAction(ctx context.Context, event *callback.CardActionTriggerEvent) (*callback.CardActionTriggerResponse, error) {
+	if event.Event == nil || event.Event.Action == nil {
+		return nil, nil
+	}
+
+	// Only handle actions from the owner.
+	operatorID := event.Event.Operator
+	if operatorID == nil || operatorID.OpenID != c.ownerID {
+		return nil, nil
+	}
+
+	// Extract the "value" key that buttonCard embeds in every button.
+	action := event.Event.Action
+	if action == nil || action.Value == nil {
+		return nil, nil
+	}
+	raw, _ := json.Marshal(action.Value)
+	var val struct {
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(raw, &val); err != nil || val.Value == "" {
+		return nil, err
+	}
+
+	// Resolve chat_id: prefer the message's open_chat_id, fall back to owner.
+	chatID := c.ownerID
+	if event.Event.Context != nil && event.Event.Context.OpenChatID != "" {
+		chatID = event.Event.Context.OpenChatID
+	}
+
 	c.handler(ctx, channel.Message{
-		Text:  value,
+		Text:  val.Value,
 		Reply: c.newReplier(chatID),
 	})
+	return nil, nil
 }
 
 // strVal safely dereferences a *string from the SDK.

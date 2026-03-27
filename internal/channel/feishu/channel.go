@@ -2,10 +2,10 @@ package feishu
 
 import (
 	"context"
-
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 	"github.com/rs/zerolog/log"
@@ -63,6 +63,9 @@ func (c *Channel) Run(ctx context.Context, handler channel.Handler) error {
 		OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
 			c.defaultHandler(ctx, event)
 			return nil
+		}).
+		OnP2CardActionTrigger(func(ctx context.Context, event *callback.CardActionTriggerEvent) (*callback.CardActionTriggerResponse, error) {
+			return c.handleCardAction(ctx, event)
 		})
 
 	wsClient := larkws.NewClient(c.appID, c.appSecret,

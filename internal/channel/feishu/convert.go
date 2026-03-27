@@ -4,17 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gogogot/internal/channel"
+	"io"
 	"strings"
 
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	"github.com/rs/zerolog/log"
 
+	"gogogot/internal/channel"
 	"gogogot/internal/core/transport"
 )
 
-// convertAndDispatch parses the Feishu message and calls c.handler.
-// It mirrors Telegram's convertAndDispatch as closely as possible.
+// convertAndDispatch parses the incoming Feishu message, downloads any
+// attachments, and calls c.handler — mirroring Telegram's convertAndDispatch.
 func (c *Channel) convertAndDispatch(ctx context.Context, chatID string, msg *larkim.EventMessage) {
 	reply := c.newReplier(chatID)
 	msgType := strVal(msg.MessageType)
@@ -35,9 +36,9 @@ func (c *Channel) convertAndDispatch(ctx context.Context, chatID string, msg *la
 			ImageKey string `json:"image_key"`
 		}
 		if err := json.Unmarshal([]byte(content), &ic); err == nil && ic.ImageKey != "" {
-			atts, err := c.downloadResource(ctx, messageID, ic.ImageKey, "image")
+			atts, err := c.processImage(ctx, messageID, ic.ImageKey)
 			if err != nil {
-				log.Error().Err(err).Msg("feishu: download image failed")
+				log.Error().Err(err).Msg("feishu: process image failed")
 			} else {
 				attachments = append(attachments, atts...)
 			}
@@ -47,36 +48,47 @@ func (c *Channel) convertAndDispatch(ctx context.Context, chatID string, msg *la
 		var fc struct {
 			FileKey  string `json:"file_key"`
 			FileName string `json:"file_name"`
+			FileSize int64  `json:"file_size"`
+			MimeType string `json:"mime_type"`
 		}
 		if err := json.Unmarshal([]byte(content), &fc); err == nil && fc.FileKey != "" {
-			atts, err := c.downloadResource(ctx, messageID, fc.FileKey, "file")
+			atts, err := c.processFile(ctx, messageID, fc.FileKey, fc.FileName, fc.MimeType, fc.FileSize)
 			if err != nil {
-				log.Error().Err(err).Msg("feishu: download file failed")
+				log.Error().Err(err).Msg("feishu: process file failed")
 			} else {
-				// Override filename from the message payload.
-				if len(atts) > 0 && fc.FileName != "" {
-					atts[0].Filename = fc.FileName
-					atts[0].MimeType = mimeFromFilename(fc.FileName)
-				}
 				attachments = append(attachments, atts...)
 			}
 		}
 
 	case "audio":
 		var ac struct {
-			FileKey string `json:"file_key"`
+			FileKey  string `json:"file_key"`
+			Duration int    `json:"duration"`
 		}
 		if err := json.Unmarshal([]byte(content), &ac); err == nil && ac.FileKey != "" {
-			atts, err := c.downloadResource(ctx, messageID, ac.FileKey, "audio")
+			atts, err := c.downloadChecked(ctx, messageID, ac.FileKey, "audio", maxGenericFileSize, "voice.ogg", "audio/ogg")
 			if err != nil {
-				log.Error().Err(err).Msg("feishu: download audio failed")
+				log.Error().Err(err).Msg("feishu: process audio failed")
+			} else {
+				attachments = append(attachments, atts...)
+			}
+		}
+
+	case "sticker":
+		var sc struct {
+			FileKey string `json:"file_key"`
+		}
+		if err := json.Unmarshal([]byte(content), &sc); err == nil && sc.FileKey != "" {
+			// Only download static stickers (no animated check available via API)
+			atts, err := c.downloadChecked(ctx, messageID, sc.FileKey, "image", maxImageFileSize, "sticker.png", "image/png")
+			if err != nil {
+				log.Error().Err(err).Msg("feishu: process sticker failed")
 			} else {
 				attachments = append(attachments, atts...)
 			}
 		}
 
 	case "post":
-		// Rich-text (飞书富文本) → plain text
 		if t := extractPostText(content); t != "" {
 			textParts = append(textParts, t)
 		}
@@ -107,7 +119,6 @@ func (c *Channel) convertAndDispatch(ctx context.Context, chatID string, msg *la
 		text = "What's in these files?"
 	}
 
-	// Command routing.
 	if strings.HasPrefix(text, "/") {
 		cmdName := strings.Fields(text)[0]
 		log.Info().Str("cmd", cmdName).Msg("feishu: command received")
@@ -123,6 +134,99 @@ func (c *Channel) convertAndDispatch(ctx context.Context, chatID string, msg *la
 }
 
 // ---------------------------------------------------------------------------
+// Per-type media processors — mirrors Telegram's media.go
+// ---------------------------------------------------------------------------
+
+// processImage downloads an image attachment with size check.
+func (c *Channel) processImage(ctx context.Context, messageID, imageKey string) ([]transport.Attachment, error) {
+	return c.downloadChecked(ctx, messageID, imageKey, "image", maxImageFileSize, "photo.jpg", "image/jpeg")
+}
+
+// processFile handles file attachments including zip/tar.gz expansion.
+func (c *Channel) processFile(ctx context.Context, messageID, fileKey, filename, mime string, fileSize int64) ([]transport.Attachment, error) {
+	if filename == "" {
+		filename = fileKey
+	}
+	if mime == "" {
+		mime = mimeFromFilename(filename)
+	}
+
+	// Expand zip archives.
+	if isArchiveZip(mime, filename) {
+		if fileSize > maxGenericFileSize {
+			return nil, fmt.Errorf("zip file too large (%d bytes)", fileSize)
+		}
+		data, err := c.downloadRaw(ctx, messageID, fileKey, "file")
+		if err != nil {
+			return nil, err
+		}
+		return extractZipFiles(data)
+	}
+
+	// Expand tar.gz archives.
+	if isArchiveTarGz(mime, filename) {
+		if fileSize > maxGenericFileSize {
+			return nil, fmt.Errorf("tar.gz file too large (%d bytes)", fileSize)
+		}
+		data, err := c.downloadRaw(ctx, messageID, fileKey, "file")
+		if err != nil {
+			return nil, err
+		}
+		return extractTarGzFiles(data)
+	}
+
+	// Image file sent as a "file" message.
+	if isImageMIME(mime) {
+		return c.downloadChecked(ctx, messageID, fileKey, "file", maxImageFileSize, filename, mime)
+	}
+
+	// Text / code files.
+	if isTextMIME(mime) || mime == "application/octet-stream" {
+		return c.downloadChecked(ctx, messageID, fileKey, "file", maxTextFileSize, filename, "text/plain")
+	}
+
+	// Generic binary.
+	return c.downloadChecked(ctx, messageID, fileKey, "file", maxGenericFileSize, filename, mime)
+}
+
+// ---------------------------------------------------------------------------
+// Download helpers
+// ---------------------------------------------------------------------------
+
+// downloadChecked downloads a resource and enforces a size limit.
+// Since Feishu's API does not expose file size before download for all types,
+// we check after reading — and discard if over limit.
+func (c *Channel) downloadChecked(ctx context.Context, messageID, fileKey, resourceType string, maxSize int64, filename, mime string) ([]transport.Attachment, error) {
+	data, err := c.downloadRaw(ctx, messageID, fileKey, resourceType)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxSize {
+		return nil, fmt.Errorf("file too large (%d bytes)", len(data))
+	}
+	return []transport.Attachment{{Filename: filename, MimeType: mime, Data: data}}, nil
+}
+
+// downloadRaw calls the SDK MessageResource.Get and returns raw bytes.
+func (c *Channel) downloadRaw(ctx context.Context, messageID, fileKey, resourceType string) ([]byte, error) {
+	resp, err := c.api.Im.MessageResource.Get(ctx,
+		larkim.NewGetMessageResourceReqBuilder().
+			MessageId(messageID).
+			FileKey(fileKey).
+			Type(resourceType).
+			Build())
+	if err != nil || !resp.Success() {
+		return nil, fmt.Errorf("feishu downloadRaw code=%d: %w", resp.Code, firstErr(err))
+	}
+	defer func() {
+		if rc, ok := resp.File.(interface{ Close() error }); ok {
+			_ = rc.Close()
+		}
+	}()
+	return io.ReadAll(resp.File)
+}
+
+// ---------------------------------------------------------------------------
 // Content parsers
 // ---------------------------------------------------------------------------
 
@@ -133,7 +237,6 @@ func parseTextContent(content string) string {
 	if err := json.Unmarshal([]byte(content), &tc); err != nil {
 		return ""
 	}
-	// Strip Feishu <at uid="...">Name</at> tags, keep @Name.
 	text := tc.Text
 	for {
 		start := strings.Index(text, "<at")
@@ -154,7 +257,6 @@ func parseTextContent(content string) string {
 	return strings.TrimSpace(text)
 }
 
-// Feishu "post" (富文本) structures.
 type postBody struct {
 	ZhCN *postLang `json:"zh_cn,omitempty"`
 	EnUS *postLang `json:"en_us,omitempty"`
