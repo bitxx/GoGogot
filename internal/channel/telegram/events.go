@@ -161,10 +161,10 @@ func (r *replier) ConsumeEvents(ctx context.Context, events <-chan transport.Eve
 				})
 
 			case transport.Message:
-				cancelThinking()
-				flush()
-				d, _ := ev.Data.(transport.MessageData)
-				_ = r.SendText(ctx, formatMessageWithLevel(d.Text, d.Level))
+			cancelThinking()
+			flush()
+			d, _ := ev.Data.(transport.MessageData)
+			_ = r.SendText(ctx, formatMessageWithLevel(d.Text, d.Level))
 
 			case transport.Ask:
 				flush()
