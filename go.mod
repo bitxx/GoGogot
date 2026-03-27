@@ -7,15 +7,17 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.27.1
 	github.com/go-telegram/bot v1.20.0
 	github.com/google/uuid v1.6.0
+	github.com/larksuite/oapi-sdk-go/v3 v3.5.3
 	github.com/openai/openai-go v1.12.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/zerolog v1.34.0
 	github.com/yuin/goldmark v1.7.17
-	github.com/larksuite/oapi-sdk-go/v3 v3.5.3
 )
 
 require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect

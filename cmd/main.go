@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"gogogot/internal/channel"
+	"gogogot/internal/channel/feishu"
 	"gogogot/internal/channel/telegram"
 	"gogogot/internal/core"
 	"gogogot/internal/core/agent"
@@ -146,6 +147,17 @@ func buildChannel(cfg *config.Config) (channel.Channel, error) {
 			return nil, fmt.Errorf("TELEGRAM_OWNER_ID is required for telegram transport")
 		}
 		return telegram.New(cfg.Telegram.Token, cfg.Telegram.OwnerID)
+	case "feishu":
+		if cfg.Feishu.AppID == "" {
+			return nil, fmt.Errorf("FEISHU_APP_ID is required for feishu transport")
+		}
+		if cfg.Feishu.AppSecret == "" {
+			return nil, fmt.Errorf("FEISHU_APP_SECRET is required for feishu transport")
+		}
+		if cfg.Feishu.OwnerID == "" {
+			return nil, fmt.Errorf("FEISHU_OWNER_ID is required for feishu transport")
+		}
+		return feishu.New(cfg.Feishu.AppID, cfg.Feishu.AppSecret, cfg.Feishu.OwnerID)
 	default:
 		return nil, fmt.Errorf("unknown transport: %s", cfg.Transport)
 	}

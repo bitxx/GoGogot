@@ -2,119 +2,48 @@ package feishu
 
 import (
 	"context"
-	"encoding/json"
-	"gogogot/internal/channel"
-	"gogogot/internal/channel/feishu/client"
-	"strings"
 
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	"github.com/rs/zerolog/log"
+
+	"gogogot/internal/channel"
 )
 
-// defaultHandler is the EventHandler passed to client.New.
-// It decodes the Feishu event envelope and routes to the appropriate handler.
-func (c *Channel) defaultHandler(ctx context.Context, env *client.EventEnvelope) {
-	if env.Header == nil || env.Event == nil {
-		// v1 schema or unrecognised — ignore.
+// defaultHandler is the OnP2MessageReceiveV1 callback registered in Run.
+func (c *Channel) defaultHandler(ctx context.Context, event *larkim.P2MessageReceiveV1) {
+	if event.Event == nil || event.Event.Sender == nil || event.Event.Message == nil {
 		return
 	}
 
-	switch env.Header.EventType {
-	case "im.message.receive_v1":
-		c.handleMessageEvent(ctx, env)
-	case "im.message.message_read_v1":
-		// read receipts — ignore
-	default:
-		log.Trace().Str("type", env.Header.EventType).Msg("feishu: unhandled event type")
-	}
-}
-
-func (c *Channel) handleMessageEvent(ctx context.Context, env *client.EventEnvelope) {
-	ev := env.Event
-	if ev.Sender == nil || ev.Message == nil {
+	// Only process messages from the owner.
+	senderID := event.Event.Sender.SenderId
+	if senderID == nil || strVal(senderID.OpenId) != c.ownerID {
+		log.Trace().Msg("feishu: ignoring message from non-owner")
 		return
 	}
 
-	// Only handle messages from the owner.
-	senderOpenID := ""
-	if ev.Sender.SenderID != nil {
-		senderOpenID = ev.Sender.SenderID.OpenID
-	}
-	if senderOpenID != c.ownerID {
-		log.Trace().Str("sender", senderOpenID).Msg("feishu: ignoring message from non-owner")
+	msg := event.Event.Message
+	chatID := strVal(msg.ChatId)
+	if chatID == "" {
 		return
 	}
 
-	msg := ev.Message
-
-	// Determine the reply target:
-	// - In a P2P chat, the chat_id is the conversation.
-	// - We always reply to the chat (not to the sender's open_id directly)
-	//   so group-bot scenarios also work.
-	chatID := msg.ChatID
-
-	// Parse the content JSON to extract text / files.
 	c.convertAndDispatch(ctx, chatID, msg)
 }
 
-// handleCardAction is called when the user clicks a button in an interactive card.
-func (c *Channel) handleCardAction(ctx context.Context, chatID, value string) {
+// handleCallback is called when the owner clicks a button in an interactive card.
+// value is the string stored in the button's "value" field.
+func (c *Channel) handleCallback(ctx context.Context, chatID, value string) {
 	c.handler(ctx, channel.Message{
 		Text:  value,
 		Reply: c.newReplier(chatID),
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Content type helpers
-// ---------------------------------------------------------------------------
-
-type textContent struct {
-	Text string `json:"text"`
-}
-
-type imageContent struct {
-	ImageKey string `json:"image_key"`
-}
-
-type fileContent struct {
-	FileKey  string `json:"file_key"`
-	FileName string `json:"file_name"`
-}
-
-type audioContent struct {
-	FileKey  string `json:"file_key"`
-	Duration int    `json:"duration"`
-}
-
-type videoContent struct {
-	FileKey   string `json:"file_key"`
-	ImageKey  string `json:"image_key"`
-	Duration  int    `json:"duration"`
-}
-
-type stickerContent struct {
-	FileKey string `json:"file_key"`
-}
-
-func parseText(content string) string {
-	var tc textContent
-	if err := json.Unmarshal([]byte(content), &tc); err != nil {
+// strVal safely dereferences a *string from the SDK.
+func strVal(s *string) string {
+	if s == nil {
 		return ""
 	}
-	// Feishu may include @mentions as <at user_id="...">Name</at> — strip them.
-	text := tc.Text
-	for strings.Contains(text, "<at") {
-		start := strings.Index(text, "<at")
-		end := strings.Index(text[start:], ">")
-		if end < 0 {
-			break
-		}
-		closeTag := strings.Index(text[start+end:], "</at>")
-		if closeTag < 0 {
-			break
-		}
-		name := text[start+end+1 : start+end+closeTag]
-		text = text[:start] + "@" + name + text[start+end+closeTag+5:]
-	}
-	return strings.TrimSpace(text)
+	return *s
 }

@@ -13,6 +13,12 @@ type TelegramConfig struct {
 	OwnerID int64
 }
 
+type FeishuConfig struct {
+	AppID     string
+	AppSecret string
+	OwnerID   string
+}
+
 type LLMConfig struct {
 	Model     string
 	Provider  string // "anthropic", "openai", or "openrouter"
@@ -31,6 +37,7 @@ type Config struct {
 	BraveAPIKey string
 
 	Telegram  TelegramConfig
+	Feishu    FeishuConfig
 	LLM       LLMConfig
 	Scheduler SchedulerConfig
 }
@@ -56,6 +63,11 @@ func Load() (*Config, error) {
 
 		Telegram: TelegramConfig{
 			Token: os.Getenv("TELEGRAM_BOT_TOKEN"),
+		},
+		Feishu: FeishuConfig{
+			AppID:     os.Getenv("FEISHU_APP_ID"),
+			AppSecret: os.Getenv("FEISHU_APP_SECRET"),
+			OwnerID:   os.Getenv("FEISHU_OWNER_ID"),
 		},
 		LLM: LLMConfig{
 			Model:     os.Getenv("GOGOGOT_MODEL"),

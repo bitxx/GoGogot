@@ -21,10 +21,10 @@ A **lightweight, extensible, and secure** open-source AI agent that lives on you
 ## Quick Start
 
 ### Prerequisites
-
 - Get a `TELEGRAM_BOT_TOKEN` by creating a new bot via [@BotFather](https://t.me/BotFather) on Telegram.
 - Find your `TELEGRAM_OWNER_ID` (your personal Telegram user ID) using a bot like [@userinfobot](https://t.me/userinfobot). **This is critical for security** — it ensures only you can communicate with your agent.
-
+- Get a `FEISHU_APP_ID`,`FEISHU_APP_SECRET` by creating a new app via [feishu](https://open.feishu.cn/) on Feishu.
+- Find your `FEISHU_OWNER_ID`,from [api-explorer](https://open.feishu.cn/api-explorer?apiName=create&project=im&resource=message&version=v1)，消息-消息管理-发送消息，查询参数选择`open_id`,然后点击`快速复制open_id`
 ### Docker
 
 No git clone needed — the image is published on Docker Hub:
@@ -113,6 +113,7 @@ Browse all available models: [Anthropic](https://docs.anthropic.com/en/docs/abou
 27 built-in tools across 10 categories:
 
 - **Telegram** — multi-chat, attachments, typing indicators
+- **Feishu** — multi-chat, attachments, typing indicators
 - **System** — bash, read/write/edit files, system info
 - **Web** — Brave search, fetch pages, HTTP requests, downloads
 - **Identity** — persistent `soul.md` / `user.md`, auto-evolving
