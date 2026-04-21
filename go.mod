@@ -1,17 +1,17 @@
 module gogogot
 
-go 1.25.0
+go 1.26.1
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
-	github.com/anthropics/anthropic-sdk-go v1.27.1
+	github.com/anthropics/anthropic-sdk-go v1.37.0
 	github.com/go-telegram/bot v1.20.0
 	github.com/google/uuid v1.6.0
 	github.com/larksuite/oapi-sdk-go/v3 v3.5.3
 	github.com/openai/openai-go v1.12.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/rs/zerolog v1.34.0
-	github.com/yuin/goldmark v1.7.17
+	github.com/rs/zerolog v1.35.1
+	github.com/yuin/goldmark v1.8.2
 )
 
 require (
