@@ -21,7 +21,7 @@ type FeishuConfig struct {
 
 type LLMConfig struct {
 	Model     string
-	Provider  string // "anthropic", "openai", or "openrouter"
+	Provider  string // "anthropic", "openai", or "deepseek"
 	MaxTokens int
 }
 

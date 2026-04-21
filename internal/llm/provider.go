@@ -32,16 +32,6 @@ var aliases = map[string]string{
 	"openai":   "openai/gpt-5-nano",
 }
 
-var anthropicToOpenRouter = map[string]string{
-	"claude-opus-4-6":   "anthropic/claude-opus-4.6",
-	"claude-sonnet-4-6": "anthropic/claude-sonnet-4.6",
-	"claude-opus-4-5":   "anthropic/claude-opus-4.5",
-	"claude-sonnet-4-5": "anthropic/claude-sonnet-4.5",
-	"claude-haiku-4-5":  "anthropic/claude-haiku-4.5",
-	"claude-sonnet-4":   "anthropic/claude-sonnet-4",
-	"claude-haiku-3-5":  "anthropic/claude-haiku-3.5",
-}
-
 var (
 	anthropicOnce    sync.Once
 	anthropicCatalog map[string]catalog.ModelDef
@@ -51,9 +41,6 @@ var (
 
 	deepseekOnce    sync.Once
 	deepseekCatalog map[string]catalog.ModelDef
-
-	openrouterOnce    sync.Once
-	openrouterCatalog map[string]catalog.ModelDef
 )
 
 func getAnthropicCatalog() map[string]catalog.ModelDef {
@@ -71,11 +58,6 @@ func getDeepSeekCatalog() map[string]catalog.ModelDef {
 	return deepseekCatalog
 }
 
-func getOpenRouterCatalog() map[string]catalog.ModelDef {
-	openrouterOnce.Do(func() { openrouterCatalog = catalog.OpenRouter() })
-	return openrouterCatalog
-}
-
 // ResolveProvider builds a Provider from an exact model ID and provider name.
 func ResolveProvider(modelID, provider string) (*Provider, error) {
 	if resolved, ok := aliases[modelID]; ok {
@@ -84,49 +66,25 @@ func ResolveProvider(modelID, provider string) (*Provider, error) {
 
 	switch provider {
 	case "anthropic":
-		if strings.Contains(modelID, "/") {
-			return nil, fmt.Errorf("model %q is an OpenRouter slug — use GOGOGOT_PROVIDER=openrouter", modelID)
-		}
 		if _, ok := getAnthropicCatalog()[modelID]; !ok {
 			return nil, fmt.Errorf("unknown Anthropic model %q — available: %s", modelID, catalogKeys(getAnthropicCatalog()))
 		}
 		return resolveAnthropic(modelID)
 
 	case "openai":
-		if strings.Contains(modelID, "/") {
-			return nil, fmt.Errorf("model %q is an OpenRouter slug — use GOGOGOT_PROVIDER=openrouter", modelID)
-		}
 		if _, ok := getOpenAICatalog()[modelID]; !ok {
 			return nil, fmt.Errorf("unknown OpenAI model %q — available: %s", modelID, catalogKeys(getOpenAICatalog()))
 		}
 		return resolveOpenAI(modelID)
 
 	case "deepseek":
-		if strings.Contains(modelID, "/") {
-			return nil, fmt.Errorf("model %q is an OpenRouter slug — use GOGOGOT_PROVIDER=openrouter", modelID)
-		}
 		if _, ok := getDeepSeekCatalog()[modelID]; !ok {
 			return nil, fmt.Errorf("unknown DeepSeek model %q — available: %s", modelID, catalogKeys(getDeepSeekCatalog()))
 		}
 		return resolveDeepSeek(modelID)
 
-	case "openrouter":
-		if _, ok := getAnthropicCatalog()[modelID]; ok {
-			if orSlug, ok := anthropicToOpenRouter[modelID]; ok {
-				return resolveOpenRouter(modelID, orSlug)
-			}
-			return nil, fmt.Errorf("model %q has no OpenRouter equivalent", modelID)
-		}
-		if _, ok := getOpenAICatalog()[modelID]; ok {
-			return resolveOpenRouter(modelID, "openai/"+modelID)
-		}
-		if !strings.Contains(modelID, "/") {
-			return nil, fmt.Errorf("unknown model %q — use a full OpenRouter slug (vendor/model)", modelID)
-		}
-		return resolveOpenRouter(modelID, modelID)
-
 	default:
-		return nil, fmt.Errorf("unknown provider %q — use 'anthropic', 'openai', 'deepseek', or 'openrouter'", provider)
+		return nil, fmt.Errorf("unknown provider %q — use 'anthropic', 'openai', or 'deepseek'", provider)
 	}
 }
 
@@ -151,30 +109,7 @@ func resolveDeepSeek(model string) (*Provider, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("DEEPSEEK_API_KEY not set for model %q", model)
 	}
-	return providerFromDef(getDeepSeekCatalog()[model], model, apiKey, "https://api.deepseek.com/anthropic", "deepseek"), nil
-}
-
-func resolveOpenRouter(id, slug string) (*Provider, error) {
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
-	if apiKey == "" {
-		return nil, fmt.Errorf("OPENROUTER_API_KEY not set for model %q", id)
-	}
-
-	p := &Provider{
-		ID: id, Model: slug,
-		BaseURL: "https://openrouter.ai/api/v1",
-		APIKey:  apiKey, Format: "openai",
-	}
-
-	if def, ok := getOpenRouterCatalog()[slug]; ok {
-		p.Label = def.Label
-		p.ContextWindow = def.ContextWindow
-		p.SupportsVision = def.Vision
-		p.InputPricePerM = def.InputPricePerM
-		p.OutputPricePerM = def.OutputPricePerM
-	}
-
-	return p, nil
+	return providerFromDef(getDeepSeekCatalog()[model], model, apiKey, "https://api.deepseek.com/anthropic", "anthropic"), nil
 }
 
 func providerFromDef(def catalog.ModelDef, model, apiKey, baseURL, format string) *Provider {

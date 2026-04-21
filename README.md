@@ -15,7 +15,7 @@ A **lightweight, extensible, and secure** open-source AI agent that lives on you
 
 - **Single binary, ~15 MB, ~10 MB RAM** — deploys with one `docker run` command
 - **Your keys stay on your server** — no cloud account, no telemetry, no phoning home
-- **You pick the model** — Anthropic, OpenAI, or any [OpenRouter](https://openrouter.ai) model
+- **You pick the model** — Anthropic, OpenAI, or DeepSeek
 - **Extensible** — clean Go interfaces (`Backend`, `Transport`, `Tool`) make it trivial to add providers, transports, or custom tools
 
 ## Quick Start
@@ -70,7 +70,6 @@ docker compose up -d
 Requires Go 1.25+:
 
 ```bash
-make generate          # fetch OpenRouter model catalog
 go run ./cmd
 ```
 
@@ -85,11 +84,8 @@ Set `GOGOGOT_PROVIDER`, `GOGOGOT_MODEL`, and the corresponding API key. The agen
 | Anthropic  | `anthropic`        | `ANTHROPIC_API_KEY`  | `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5` |
 | OpenAI     | `openai`           | `OPENAI_API_KEY`     | `gpt-4o`, `gpt-4.1`, `gpt-5.4`, `o3`, `o4-mini`            |
 | DeepSeek   | `deepseek`         | `DEEPSEEK_API_KEY`   | `deepseek-chat-3.2`, `deepseek-reasoner-3.2`              |
-| OpenRouter | `openrouter`       | `OPENROUTER_API_KEY` | `deepseek/deepseek-v3.2`, `google/gemini-3-flash-preview`  |
 
 Model metadata (context window, vision support, pricing) is stored in JSON catalogs under [`llm/catalog/`](internal/llm/catalog/) — just edit the JSON to add or update models.
-
-With OpenRouter you can also pass any slug directly, e.g. `GOGOGOT_MODEL=moonshotai/kimi-k2.5`.
 
 ### Short Aliases
 
@@ -106,7 +102,7 @@ For convenience, short aliases are supported as `GOGOGOT_MODEL` values:
 | `minimax` | `minimax/minimax-m2.5` |
 | `kimi` | `moonshotai/kimi-k2.5` |
 
-Browse all available models: [Anthropic](https://docs.anthropic.com/en/docs/about-claude/models) | [OpenAI](https://platform.openai.com/docs/models) | [OpenRouter](https://openrouter.ai/models) | Benchmarks: [PinchBench](https://pinchbench.com/)
+Browse all available models: [Anthropic](https://docs.anthropic.com/en/docs/about-claude/models) | [OpenAI](https://platform.openai.com/docs/models) | Benchmarks: [PinchBench](https://pinchbench.com/)
 
 ## Features
 
@@ -122,7 +118,7 @@ Browse all available models: [Anthropic](https://docs.anthropic.com/en/docs/abou
 - **Task planning** — session-scoped checklist for multi-step work
 - **Scheduling** — cron-based self-scheduling, persisted across restarts
 - **Compaction** — automatic context compression near token limits
-- **Multi-model** — Anthropic, OpenAI, or any OpenRouter model
+- **Multi-model** — Anthropic, OpenAI, or DeepSeek
 - **Observability** — compact info-level iteration logs; full request/response dumps at trace level (`LOG_LEVEL=debug`)
 
 ## Use Cases

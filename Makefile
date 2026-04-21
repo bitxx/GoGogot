@@ -2,15 +2,12 @@ BIN   := gogogot
 IMAGE := octagonlab/gogogot
 TAG   := latest
 
-.PHONY: run build clean lint generate docker-build docker-push docker-release deploy tag
-
-generate:
-	curl -sf https://openrouter.ai/api/v1/models -o internal/llm/catalog/openrouter_models.json
+.PHONY: run build clean lint docker-build docker-push docker-release deploy tag
 
 run:
 	go run ./cmd $(ARGS)
 
-build: generate
+build:
 	go build -o $(BIN) ./cmd
 
 clean:
